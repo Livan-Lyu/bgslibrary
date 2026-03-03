@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <opencv_storage>
-<tictoc>""</tictoc>
+<tictoc>"ViBe"</tictoc>
 <enablePreProcessor>0</enablePreProcessor>
 <enableForegroundMaskAnalysis>0</enableForegroundMaskAnalysis>
-<enableFrameDifference>1</enableFrameDifference>
+<enableFrameDifference>0</enableFrameDifference>
 <enableStaticFrameDifference>0</enableStaticFrameDifference>
 <enableWeightedMovingMean>0</enableWeightedMovingMean>
 <enableWeightedMovingVariance>0</enableWeightedMovingVariance>
@@ -43,7 +43,7 @@
 <enableLOBSTER>0</enableLOBSTER>
 <enablePAWCS>0</enablePAWCS>
 <enableTwoPoints>0</enableTwoPoints>
-<enableViBe>0</enableViBe>
+<enableViBe>1</enableViBe>
 <enableCodeBook>0</enableCodeBook>
 <enableGMG>0</enableGMG>
 </opencv_storage>

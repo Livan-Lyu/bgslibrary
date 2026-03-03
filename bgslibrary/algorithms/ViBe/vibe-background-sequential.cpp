@@ -1,7 +1,10 @@
 #include <assert.h>
+#include <stdio.h>
 #include <time.h>
 
 #include "vibe-background-sequential.h"
+
+#define PROFILE_PRINT_INTERVAL 100
 
 //using namespace bgslibrary::algorithms::vibe;
 namespace bgslibrary
@@ -54,6 +57,29 @@ namespace bgslibrary
         int *neighbor;
         uint32_t *position;
       };
+
+      // -----------------------------------------------------------------------------
+      // Profiling: segmented timing
+      // -----------------------------------------------------------------------------
+      static inline double elapsed_sec(clock_t t0, clock_t t1) {
+        return static_cast<double>(t1 - t0) / CLOCKS_PER_SEC;
+      }
+
+      static double g_c1_seg_clear_mask = 0.0, g_c1_seg_first_hist = 0.0, g_c1_seg_other_hists = 0.0;
+      static double g_c1_seg_buffer_search = 0.0, g_c1_seg_make_output = 0.0;
+      static unsigned long g_c1_seg_frames = 0;
+
+      static double g_c1_upd_interior = 0.0, g_c1_upd_first_row = 0.0, g_c1_upd_last_row = 0.0;
+      static double g_c1_upd_first_col = 0.0, g_c1_upd_last_col = 0.0, g_c1_upd_first_pixel = 0.0;
+      static unsigned long g_c1_upd_frames = 0;
+
+      static double g_c3_seg_clear_mask = 0.0, g_c3_seg_first_hist = 0.0, g_c3_seg_other_hists = 0.0;
+      static double g_c3_seg_buffer_search = 0.0, g_c3_seg_make_output = 0.0;
+      static unsigned long g_c3_seg_frames = 0;
+
+      static double g_c3_upd_interior = 0.0, g_c3_upd_first_row = 0.0, g_c3_upd_last_row = 0.0;
+      static double g_c3_upd_first_col = 0.0, g_c3_upd_last_col = 0.0, g_c3_upd_first_pixel = 0.0;
+      static unsigned long g_c3_upd_frames = 0;
 
       // -----------------------------------------------------------------------------
       // Print parameters
@@ -289,17 +315,26 @@ namespace bgslibrary
         uint8_t *historyImage = model->historyImage;
         uint8_t *historyBuffer = model->historyBuffer;
 
+        clock_t t0, t1;
+
         /* Segmentation. */
+        t0 = clock();
         memset(segmentation_map, matchingNumber - 1, width * height);
+        t1 = clock();
+        g_c1_seg_clear_mask += elapsed_sec(t0, t1);
 
         /* First history Image structure. */
+        t0 = clock();
         for (int index = width * height - 1; index >= 0; --index) {
           //if (abs_uint(image_data[index] - historyImage[index]) > matchingThreshold)
           if (abs_uint(image_data[index] - historyImage[index]) > distance_Han2014Improved(image_data[index], historyImage[index]))
             segmentation_map[index] = matchingNumber;
         }
+        t1 = clock();
+        g_c1_seg_first_hist += elapsed_sec(t0, t1);
 
         /* Next historyImages. */
+        t0 = clock();
         for (int i = 1; i < NUMBER_OF_HISTORY_IMAGES; ++i) {
           uint8_t *pels = historyImage + i * width * height;
 
@@ -309,8 +344,11 @@ namespace bgslibrary
               --segmentation_map[index];
           }
         }
+        t1 = clock();
+        g_c1_seg_other_hists += elapsed_sec(t0, t1);
 
         /* For swapping. */
+        t0 = clock();
         model->lastHistoryImageSwapped = (model->lastHistoryImageSwapped + 1) % NUMBER_OF_HISTORY_IMAGES;
         uint8_t *swappingImageBuffer = historyImage + (model->lastHistoryImageSwapped) * width * height;
 
@@ -341,10 +379,28 @@ namespace bgslibrary
             } // for
           } // if
         } // for
+        t1 = clock();
+        g_c1_seg_buffer_search += elapsed_sec(t0, t1);
 
         /* Produces the output. Note that this step is application-dependent. */
+        t0 = clock();
         for (uint8_t *mask = segmentation_map; mask < segmentation_map + (width * height); ++mask)
           if (*mask > 0) *mask = COLOR_FOREGROUND;
+        t1 = clock();
+        g_c1_seg_make_output += elapsed_sec(t0, t1);
+
+        ++g_c1_seg_frames;
+        if (g_c1_seg_frames % PROFILE_PRINT_INTERVAL == 0) {
+          double total = g_c1_seg_clear_mask + g_c1_seg_first_hist + g_c1_seg_other_hists + g_c1_seg_buffer_search + g_c1_seg_make_output;
+          if (total > 0) {
+            printf("[ViBe C1R Seg] over %lu frames:\n", g_c1_seg_frames);
+            printf("  clear_mask:     %6.2f%%\n", 100.0 * g_c1_seg_clear_mask / total);
+            printf("  first_hist:     %6.2f%%\n", 100.0 * g_c1_seg_first_hist / total);
+            printf("  other_hists:    %6.2f%%\n", 100.0 * g_c1_seg_other_hists / total);
+            printf("  buffer_search:  %6.2f%%\n", 100.0 * g_c1_seg_buffer_search / total);
+            printf("  make_output:    %6.2f%%\n", 100.0 * g_c1_seg_make_output / total);
+          }
+        }
 
         return(0);
       }
@@ -378,10 +434,13 @@ namespace bgslibrary
         int *neighbor = model->neighbor;
         uint32_t *position = model->position;
 
+        clock_t t0, t1;
+
         /* All the frame, except the border. */
         uint32_t shift, indX, indY;
         unsigned int x, y;
 
+        t0 = clock();
         for (y = 1; y < height - 1; ++y) {
           shift = rand() % width;
           indX = jump[shift]; // index_jump should never be zero (> 1).
@@ -409,8 +468,11 @@ namespace bgslibrary
             indX += jump[shift];
           }
         }
+        t1 = clock();
+        g_c1_upd_interior += elapsed_sec(t0, t1);
 
         /* First row. */
+        t0 = clock();
         y = 0;
         shift = rand() % width;
         indX = jump[shift]; // index_jump should never be zero (> 1).
@@ -430,8 +492,11 @@ namespace bgslibrary
           ++shift;
           indX += jump[shift];
         }
+        t1 = clock();
+        g_c1_upd_first_row += elapsed_sec(t0, t1);
 
         /* Last row. */
+        t0 = clock();
         y = height - 1;
         shift = rand() % width;
         indX = jump[shift]; // index_jump should never be zero (> 1).
@@ -451,8 +516,11 @@ namespace bgslibrary
           ++shift;
           indX += jump[shift];
         }
+        t1 = clock();
+        g_c1_upd_last_row += elapsed_sec(t0, t1);
 
         /* First column. */
+        t0 = clock();
         x = 0;
         shift = rand() % height;
         indY = jump[shift]; // index_jump should never be zero (> 1).
@@ -472,8 +540,11 @@ namespace bgslibrary
           ++shift;
           indY += jump[shift];
         }
+        t1 = clock();
+        g_c1_upd_first_col += elapsed_sec(t0, t1);
 
         /* Last column. */
+        t0 = clock();
         x = width - 1;
         shift = rand() % height;
         indY = jump[shift]; // index_jump should never be zero (> 1).
@@ -493,8 +564,11 @@ namespace bgslibrary
           ++shift;
           indY += jump[shift];
         }
+        t1 = clock();
+        g_c1_upd_last_col += elapsed_sec(t0, t1);
 
         /* The first pixel! */
+        t0 = clock();
         if (rand() % model->updateFactor == 0) {
           if (updating_mask[0] == 0) {
             int position = rand() % model->numberOfSamples;
@@ -505,6 +579,22 @@ namespace bgslibrary
               int pos = position - NUMBER_OF_HISTORY_IMAGES;
               historyBuffer[pos] = image_data[0];
             }
+          }
+        }
+        t1 = clock();
+        g_c1_upd_first_pixel += elapsed_sec(t0, t1);
+
+        ++g_c1_upd_frames;
+        if (g_c1_upd_frames % PROFILE_PRINT_INTERVAL == 0) {
+          double total = g_c1_upd_interior + g_c1_upd_first_row + g_c1_upd_last_row + g_c1_upd_first_col + g_c1_upd_last_col + g_c1_upd_first_pixel;
+          if (total > 0) {
+            printf("[ViBe C1R Update] over %lu frames:\n", g_c1_upd_frames);
+            printf("  interior:    %6.2f%%\n", 100.0 * g_c1_upd_interior / total);
+            printf("  first_row:   %6.2f%%\n", 100.0 * g_c1_upd_first_row / total);
+            printf("  last_row:    %6.2f%%\n", 100.0 * g_c1_upd_last_row / total);
+            printf("  first_col:   %6.2f%%\n", 100.0 * g_c1_upd_first_col / total);
+            printf("  last_col:    %6.2f%%\n", 100.0 * g_c1_upd_last_col / total);
+            printf("  first_pixel: %6.2f%%\n", 100.0 * g_c1_upd_first_pixel / total);
           }
         }
 
@@ -610,10 +700,16 @@ namespace bgslibrary
         uint8_t *historyImage = model->historyImage;
         uint8_t *historyBuffer = model->historyBuffer;
 
+        clock_t t0, t1;
+
         /* Segmentation. */
+        t0 = clock();
         memset(segmentation_map, matchingNumber - 1, width * height);
+        t1 = clock();
+        g_c3_seg_clear_mask += elapsed_sec(t0, t1);
 
         /* First history Image structure. */
+        t0 = clock();
         uint8_t *first = historyImage;
 
         for (int index = width * height - 1; index >= 0; --index) {
@@ -625,8 +721,11 @@ namespace bgslibrary
             )
             segmentation_map[index] = matchingNumber;
         }
+        t1 = clock();
+        g_c3_seg_first_hist += elapsed_sec(t0, t1);
 
         /* Next historyImages. */
+        t0 = clock();
         for (int i = 1; i < NUMBER_OF_HISTORY_IMAGES; ++i) {
           uint8_t *pels = historyImage + i * (3 * width) * height;
 
@@ -640,8 +739,11 @@ namespace bgslibrary
               --segmentation_map[index];
           }
         }
+        t1 = clock();
+        g_c3_seg_other_hists += elapsed_sec(t0, t1);
 
         // For swapping
+        t0 = clock();
         model->lastHistoryImageSwapped = (model->lastHistoryImageSwapped + 1) % NUMBER_OF_HISTORY_IMAGES;
         uint8_t *swappingImageBuffer = historyImage + (model->lastHistoryImageSwapped) * (3 * width) * height;
 
@@ -683,10 +785,36 @@ namespace bgslibrary
             } // for
           } // if
         } // for
+        t1 = clock();
+        g_c3_seg_buffer_search += elapsed_sec(t0, t1);
 
         /* Produces the output. Note that this step is application-dependent. */
+        t0 = clock();
         for (uint8_t *mask = segmentation_map; mask < segmentation_map + (width * height); ++mask)
           if (*mask > 0) *mask = COLOR_FOREGROUND;
+        t1 = clock();
+        g_c3_seg_make_output += elapsed_sec(t0, t1);
+
+        ++g_c3_seg_frames;
+        if (g_c3_seg_frames % PROFILE_PRINT_INTERVAL == 0) {
+          double total_seg = g_c3_seg_clear_mask + g_c3_seg_first_hist + g_c3_seg_other_hists + g_c3_seg_buffer_search + g_c3_seg_make_output;
+          double total_upd = g_c3_upd_interior + g_c3_upd_first_row + g_c3_upd_last_row + g_c3_upd_first_col + g_c3_upd_last_col + g_c3_upd_first_pixel;
+          double total_both = total_seg + total_upd;
+
+          if (total_seg > 0) {
+            printf("[ViBe C3R Seg] over %lu frames:\n", g_c3_seg_frames);
+            printf("  clear_mask:     %6.2f%%\n", 100.0 * g_c3_seg_clear_mask / total_seg);
+            printf("  first_hist:     %6.2f%%\n", 100.0 * g_c3_seg_first_hist / total_seg);
+            printf("  other_hists:    %6.2f%%\n", 100.0 * g_c3_seg_other_hists / total_seg);
+            printf("  buffer_search:  %6.2f%%\n", 100.0 * g_c3_seg_buffer_search / total_seg);
+            printf("  make_output:    %6.2f%%\n", 100.0 * g_c3_seg_make_output / total_seg);
+          }
+          if (total_both > 0) {
+            printf("[ViBe C3R] Seg vs Update (over %lu frames):\n", g_c3_seg_frames);
+            printf("  Seg:    %6.2f%%  (%.6f s total, %.4f ms/frame)\n", 100.0 * total_seg / total_both, total_seg, 1000.0 * total_seg / g_c3_seg_frames);
+            printf("  Update: %6.2f%%  (%.6f s total, %.4f ms/frame)\n", 100.0 * total_upd / total_both, total_upd, 1000.0 * total_upd / g_c3_upd_frames);
+          }
+        }
 
         return(0);
       }
@@ -720,10 +848,13 @@ namespace bgslibrary
         int *neighbor = model->neighbor;
         uint32_t *position = model->position;
 
+        clock_t t0, t1;
+
         /* All the frame, except the border. */
         uint32_t shift, indX, indY;
         int x, y;
 
+        t0 = clock();
         for (y = 1; y < height - 1; ++y) {
           shift = rand() % width;
           indX = jump[shift]; // index_jump should never be zero (> 1).
@@ -765,8 +896,11 @@ namespace bgslibrary
             indX += jump[shift];
           }
         }
+        t1 = clock();
+        g_c3_upd_interior += elapsed_sec(t0, t1);
 
         /* First row. */
+        t0 = clock();
         y = 0;
         shift = rand() % width;
         indX = jump[shift]; // index_jump should never be zero (> 1).
@@ -796,8 +930,11 @@ namespace bgslibrary
           ++shift;
           indX += jump[shift];
         }
+        t1 = clock();
+        g_c3_upd_first_row += elapsed_sec(t0, t1);
 
         /* Last row. */
+        t0 = clock();
         y = height - 1;
         shift = rand() % width;
         indX = jump[shift]; // index_jump should never be zero (> 1).
@@ -827,8 +964,11 @@ namespace bgslibrary
           ++shift;
           indX += jump[shift];
         }
+        t1 = clock();
+        g_c3_upd_last_row += elapsed_sec(t0, t1);
 
         /* First column. */
+        t0 = clock();
         x = 0;
         shift = rand() % height;
         indY = jump[shift]; // index_jump should never be zero (> 1).
@@ -857,8 +997,11 @@ namespace bgslibrary
           ++shift;
           indY += jump[shift];
         }
+        t1 = clock();
+        g_c3_upd_first_col += elapsed_sec(t0, t1);
 
         /* Last column. */
+        t0 = clock();
         x = width - 1;
         shift = rand() % height;
         indY = jump[shift]; // index_jump should never be zero (> 1).
@@ -888,8 +1031,11 @@ namespace bgslibrary
           ++shift;
           indY += jump[shift];
         }
+        t1 = clock();
+        g_c3_upd_last_col += elapsed_sec(t0, t1);
 
         /* The first pixel! */
+        t0 = clock();
         if (rand() % model->updateFactor == 0) {
           if (updating_mask[0] == 0) {
             int position = rand() % model->numberOfSamples;
@@ -910,6 +1056,22 @@ namespace bgslibrary
               historyBuffer[3 * pos + 1] = g;
               historyBuffer[3 * pos + 2] = b;
             }
+          }
+        }
+        t1 = clock();
+        g_c3_upd_first_pixel += elapsed_sec(t0, t1);
+
+        ++g_c3_upd_frames;
+        if (g_c3_upd_frames % PROFILE_PRINT_INTERVAL == 0) {
+          double total = g_c3_upd_interior + g_c3_upd_first_row + g_c3_upd_last_row + g_c3_upd_first_col + g_c3_upd_last_col + g_c3_upd_first_pixel;
+          if (total > 0) {
+            printf("[ViBe C3R Update] over %lu frames:\n", g_c3_upd_frames);
+            printf("  interior:     %6.2f%%\n", 100.0 * g_c3_upd_interior / total);
+            printf("  first_row:    %6.2f%%\n", 100.0 * g_c3_upd_first_row / total);
+            printf("  last_row:     %6.2f%%\n", 100.0 * g_c3_upd_last_row / total);
+            printf("  first_col:    %6.2f%%\n", 100.0 * g_c3_upd_first_col / total);
+            printf("  last_col:     %6.2f%%\n", 100.0 * g_c3_upd_last_col / total);
+            printf("  first_pixel:  %6.2f%%\n", 100.0 * g_c3_upd_first_pixel / total);
           }
         }
 
