@@ -1,0 +1,8 @@
+/home/livan/research/bgs/bgslibrary/build/CMakeFiles/bgslibrary_core.dir
+/home/livan/research/bgs/bgslibrary/build/CMakeFiles/bgslibrary.dir
+/home/livan/research/bgs/bgslibrary/build/CMakeFiles/edit_cache.dir
+/home/livan/research/bgs/bgslibrary/build/CMakeFiles/rebuild_cache.dir
+/home/livan/research/bgs/bgslibrary/build/CMakeFiles/list_install_components.dir
+/home/livan/research/bgs/bgslibrary/build/CMakeFiles/install.dir
+/home/livan/research/bgs/bgslibrary/build/CMakeFiles/install/local.dir
+/home/livan/research/bgs/bgslibrary/build/CMakeFiles/install/strip.dir
