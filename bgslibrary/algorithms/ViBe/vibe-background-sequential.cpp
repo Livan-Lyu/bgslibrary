@@ -4,23 +4,7 @@
 
 #include "vibe-background-sequential.h"
 
-/*
- * ============================================================================
- * NOTE [EXPERIMENTAL BENCHMARK CODE]
- * The marked section below is intentionally unrelated to ViBe algorithm logic.
- * It only injects extra ALU work into distance_is_close_8u_C3R for profiling
- * compute-bound vs memory-bandwidth-bound behavior.
- * Set VIBE_DISTANCE_EXTRA_ITERS to 0 for normal behavior.
- * ============================================================================
- */
-
 #define PROFILE_PRINT_INTERVAL 100
-
-/* ==================== BEGIN: EXPERIMENTAL BENCHMARK INJECTION ==================== */
-#ifndef VIBE_DISTANCE_EXTRA_ITERS
-#define VIBE_DISTANCE_EXTRA_ITERS 0
-#endif
-/* ===================== END: EXPERIMENTAL BENCHMARK INJECTION ===================== */
 
 //using namespace bgslibrary::algorithms::vibe;
 namespace bgslibrary
@@ -49,55 +33,8 @@ namespace bgslibrary
         return (i >= 0) ? i : -i;
       }
 
-      /* ==================== BEGIN: EXPERIMENTAL BENCHMARK INJECTION ==================== */
-      static inline void burn_compute_cycles_u32(uint32_t seed)
-      {
-  #if VIBE_DISTANCE_EXTRA_ITERS > 0
-          static uint32_t global_sync = 0; // 静态变量，用于后验
-          static uint64_t call_count = 0;  // 计数器
-
-
-          uint32_t x = seed;
-          for (uint32_t i = 0; i < VIBE_DISTANCE_EXTRA_ITERS; ++i) {
-            // xorshift + LCG style integer mixing: ALU-heavy, no extra image memory IO.
-            x ^= (x << 13);
-            x ^= (x >> 17);
-            x ^= (x << 5);
-            x = x * 1664525u + 1013904223u;
-          }
-
-          // 关键：将结果累加到一个静态变量中，确保编译器认为 x 是“有用”的
-          global_sync += x;
-          call_count++;
-
-          // 每隔 1,000,000 次调用才打印一次（后验）
-          // 这个判断在大多数情况下只会增加一个寄存器比较指令，不占带宽
-          if ((call_count & 0xFFFFF) == 0) { 
-              printf("[POST-CHECK] Calls: %llu, Checksum: %u\n", call_count, global_sync);
-          }
-
-  #if defined(__GNUC__) || defined(__clang__)
-          // Keep computation alive without introducing memory reads/writes.
-          asm volatile("" : "+r"(x));
-  #else
-          // Fallback for non-GNU compilers. This may add a tiny memory side effect.
-          static volatile uint32_t sink = 0;
-          sink ^= x;
-  #endif
-  #else
-          (void)seed;
-  #endif
-      }
-      /* ===================== END: EXPERIMENTAL BENCHMARK INJECTION ===================== */
-
       static int32_t distance_is_close_8u_C3R(uint8_t r1, uint8_t g1, uint8_t b1, uint8_t r2, uint8_t g2, uint8_t b2, uint32_t threshold)
       {
-        /* ================= BEGIN: EXPERIMENTAL BENCHMARK INJECTION ================= */
-        burn_compute_cycles_u32(
-          ((uint32_t)r1 << 24) ^ ((uint32_t)g1 << 16) ^ ((uint32_t)b1 << 8) ^
-          ((uint32_t)r2 << 3) ^ ((uint32_t)g2 << 2) ^ ((uint32_t)b2 << 1) ^ threshold
-        );
-        /* ================== END: EXPERIMENTAL BENCHMARK INJECTION ================== */
         uint32_t sum = abs_uint(r1 - r2) + abs_uint(g1 - g2) + abs_uint(b1 - b2);
         return ((2 * sum) <= (9 * threshold));
       }
@@ -769,7 +706,6 @@ namespace bgslibrary
         uint8_t *historyBuffer = model->historyBuffer;
 
         clock_t t0, t1;
-        uint32_t loop;
 
         /* Segmentation. */
         t0 = clock();
@@ -828,7 +764,6 @@ namespace bgslibrary
             uint32_t indexHistoryBuffer = (3 * index) * numberOfTests;
 
             for (int i = numberOfTests; i > 0; --i, indexHistoryBuffer += 3) {
-              //++loop;
               if (
                 distance_is_close_8u_C3R(
                   image_data[(3 * index)], image_data[(3 * index) + 1], image_data[(3 * index) + 2],
