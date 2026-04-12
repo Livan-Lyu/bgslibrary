@@ -257,7 +257,6 @@ These tasks automatically handle dependencies, ensuring a consistent build state
 
 ### More
 
-* [Docker images](https://github.com/andrewssobral/bgslibrary/wiki/Docker-images)
 * [How to integrate BGSLibrary in your own CPP code](https://github.com/andrewssobral/bgslibrary/wiki/How-to-integrate-BGSLibrary-in-your-own-CPP-code)
 * [How to contribute](https://github.com/andrewssobral/bgslibrary/wiki/How-to-contribute)
 * [List of collaborators](https://github.com/andrewssobral/bgslibrary/wiki/List-of-collaborators)

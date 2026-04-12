@@ -153,6 +153,8 @@ namespace bgslibrary
       loopDelay = (1. / input_fps)*1000.;
     std::cout << "loopDelay:" << loopDelay << std::endl;
 
+    frameProcessor->setOutputFps(input_fps > 0 ? static_cast<double>(input_fps) : 1000.0 / loopDelay);
+
     std::cout << "Press 'ESC' to stop..." << std::endl;
     do
     {
@@ -161,6 +163,7 @@ namespace bgslibrary
       capture >> frame;
       if (frame.empty()) break;
 
+      // 设置输入帧的放缩比率
       cv::resize(frame, frame, cv::Size(), input_resize_percent/100., input_resize_percent / 100.);
 
       if (firstTime && input_resize_percent != 100)
@@ -223,6 +226,7 @@ namespace bgslibrary
       cv::Mat img_input;
       frame.copyTo(img_input);
 
+      // 处理帧并计时
       start_time = cv::getTickCount();
       frameProcessor->process(img_input);
       delta_time = cv::getTickCount() - start_time;
@@ -239,8 +243,7 @@ namespace bgslibrary
               cv::Scalar(0,0,255), // BGR Color
               1); // Line Thickness (Optional)
 
-      if (showOutput)
-        cv::imshow("Input", img_input);
+      // Input frame is streamed over UDP in FrameProcessor (GStreamer).
 
       //cvResetImageROI(frame);
 

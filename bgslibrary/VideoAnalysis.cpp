@@ -127,10 +127,10 @@ namespace bgslibrary
 
       videoCapture->start();
 
+      frameProcessor->finish();
+
       if (use_file || use_camera)
         break;
-
-      frameProcessor->finish();
 
       auto key = cv::waitKey(500);
       if (key == KEY_ESC)

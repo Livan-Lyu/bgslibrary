@@ -13,6 +13,7 @@ namespace bgslibrary
   {
     namespace vibe
     {
+      // self adaptive distance threshold.
       uint32_t distance_Han2014Improved(uint8_t pixel, uint8_t bg)
       {
         uint8_t min, max;
@@ -80,6 +81,9 @@ namespace bgslibrary
       static double g_c3_upd_interior = 0.0, g_c3_upd_first_row = 0.0, g_c3_upd_last_row = 0.0;
       static double g_c3_upd_first_col = 0.0, g_c3_upd_last_col = 0.0, g_c3_upd_first_pixel = 0.0;
       static unsigned long g_c3_upd_frames = 0;
+
+      /* Inner function timer */
+      static double g_c3_seg_inner_distance_closest = 0.0;
 
       // -----------------------------------------------------------------------------
       // Print parameters
@@ -646,7 +650,7 @@ namespace bgslibrary
           uint8_t value_1 = image_data[index];
           uint8_t value_2 = image_data[index - 1];
           uint8_t value_3 = image_data[index - 2];
-          for(int x = 0; x < model->numberOfSamples - NUMBER_OF_HISTORY_IMAGES; ++x) {
+          for(uint32_t x = 0; x < model->numberOfSamples - NUMBER_OF_HISTORY_IMAGES; ++x) {
             int value_plus_noise1 = plus_noise(value_1);
             int value_plus_noise2 = plus_noise(value_2);
             int value_plus_noise3 = plus_noise(value_3);
@@ -701,12 +705,13 @@ namespace bgslibrary
         uint8_t *historyBuffer = model->historyBuffer;
 
         clock_t t0, t1;
+        uint32_t loop;
 
         /* Segmentation. */
         t0 = clock();
         memset(segmentation_map, matchingNumber - 1, width * height);
         t1 = clock();
-        g_c3_seg_clear_mask += elapsed_sec(t0, t1);
+        g_c3_seg_clear_mask += elapsed_sec(t0, t1); // clear_mask: 0.87%
 
         /* First history Image structure. */
         t0 = clock();
@@ -722,7 +727,7 @@ namespace bgslibrary
             segmentation_map[index] = matchingNumber;
         }
         t1 = clock();
-        g_c3_seg_first_hist += elapsed_sec(t0, t1);
+        g_c3_seg_first_hist += elapsed_sec(t0, t1); //first_hist: 20.12%
 
         /* Next historyImages. */
         t0 = clock();
@@ -740,8 +745,9 @@ namespace bgslibrary
           }
         }
         t1 = clock();
-        g_c3_seg_other_hists += elapsed_sec(t0, t1);
+        g_c3_seg_other_hists += elapsed_sec(t0, t1); //other_hists: 23.62%
 
+        /*========================================= buffer searching ========================================*/
         // For swapping
         t0 = clock();
         model->lastHistoryImageSwapped = (model->lastHistoryImageSwapped + 1) % NUMBER_OF_HISTORY_IMAGES;
@@ -758,6 +764,7 @@ namespace bgslibrary
             uint32_t indexHistoryBuffer = (3 * index) * numberOfTests;
 
             for (int i = numberOfTests; i > 0; --i, indexHistoryBuffer += 3) {
+              //++loop;
               if (
                 distance_is_close_8u_C3R(
                   image_data[(3 * index)], image_data[(3 * index) + 1], image_data[(3 * index) + 2],
@@ -766,6 +773,7 @@ namespace bgslibrary
                 )
                 )
                 --segmentation_map[index];
+              //g_c3_seg_inner_distance_closest += elapsed_sec(t0, t1); // inner_distance_closest_function
 
               /* Swaping: Putting found value in history image buffer. */
               uint8_t temp_r = swappingImageBuffer[(3 * index)];
@@ -785,16 +793,19 @@ namespace bgslibrary
             } // for
           } // if
         } // for
+        /*===============================================================================================*/
+
         t1 = clock();
-        g_c3_seg_buffer_search += elapsed_sec(t0, t1);
+        g_c3_seg_buffer_search += elapsed_sec(t0, t1); // buffer_search: 50.76%
 
         /* Produces the output. Note that this step is application-dependent. */
         t0 = clock();
         for (uint8_t *mask = segmentation_map; mask < segmentation_map + (width * height); ++mask)
           if (*mask > 0) *mask = COLOR_FOREGROUND;
         t1 = clock();
-        g_c3_seg_make_output += elapsed_sec(t0, t1);
+        g_c3_seg_make_output += elapsed_sec(t0, t1); // make_output: 4.63%
 
+      /*============================================ Profiling. =================================================*/
         ++g_c3_seg_frames;
         if (g_c3_seg_frames % PROFILE_PRINT_INTERVAL == 0) {
           double total_seg = g_c3_seg_clear_mask + g_c3_seg_first_hist + g_c3_seg_other_hists + g_c3_seg_buffer_search + g_c3_seg_make_output;
@@ -808,13 +819,17 @@ namespace bgslibrary
             printf("  other_hists:    %6.2f%%\n", 100.0 * g_c3_seg_other_hists / total_seg);
             printf("  buffer_search:  %6.2f%%\n", 100.0 * g_c3_seg_buffer_search / total_seg);
             printf("  make_output:    %6.2f%%\n", 100.0 * g_c3_seg_make_output / total_seg);
+            printf("  buffer_search:  %6.2f%% ms/frame\n", g_c3_seg_buffer_search / g_c3_seg_frames);
+            //printf("  inner funtion of buffer search: %6.2f%%\n", 100.0 * g_c3_seg_inner_distance_closest / g_c3_seg_frames * loop);
           }
-          if (total_both > 0) {
+          if (total_both > 0) { // Since the segmentation and update functions are separate, put this print in one of them. And since the time is total time of hundreds of frames, so the error of one frame is negligible.
             printf("[ViBe C3R] Seg vs Update (over %lu frames):\n", g_c3_seg_frames);
             printf("  Seg:    %6.2f%%  (%.6f s total, %.4f ms/frame)\n", 100.0 * total_seg / total_both, total_seg, 1000.0 * total_seg / g_c3_seg_frames);
             printf("  Update: %6.2f%%  (%.6f s total, %.4f ms/frame)\n", 100.0 * total_upd / total_both, total_upd, 1000.0 * total_upd / g_c3_upd_frames);
           }
         }
+
+        //if (g_c3_seg_frames == 3) { printf("%ld\n", (uintptr_t)historyBuffer % 16); }  print is 0, which means historyBuffer is 16-byte aligned, which is good for SIMD optimization in the future.
 
         return(0);
       }
@@ -854,6 +869,7 @@ namespace bgslibrary
         uint32_t shift, indX, indY;
         int x, y;
 
+      /* ================================ Updating the interior of the image. ====================================*/
         t0 = clock();
         for (y = 1; y < height - 1; ++y) {
           shift = rand() % width;
@@ -897,7 +913,9 @@ namespace bgslibrary
           }
         }
         t1 = clock();
-        g_c3_upd_interior += elapsed_sec(t0, t1);
+        g_c3_upd_interior += elapsed_sec(t0, t1); // interior: 98.44%
+
+        /* ================================ Updating the borders of the image. ====================================*/
 
         /* First row. */
         t0 = clock();
@@ -1080,3 +1098,24 @@ namespace bgslibrary
     }
   }
 }
+
+/*
+[ViBe C3R Seg] over 300 frames:
+  clear_mask:       0.87%
+  first_hist:      20.12%
+  other_hists:     23.62%
+  buffer_search:   50.76%
+  make_output:      4.63%
+
+[ViBe C3R Update] over 300 frames:
+  interior:      98.44%
+  first_row:      0.42%
+  last_row:       0.21%
+  first_col:      0.43%
+  last_col:       0.33%
+  first_pixel:    0.16%
+
+[ViBe C3R] Seg vs Update (over 300 frames):
+Seg:     82.76%  (0.462284 s total, 1.5409 ms/frame)
+Update:  17.24%  (0.096281 s total, 0.3220 ms/frame)
+*/

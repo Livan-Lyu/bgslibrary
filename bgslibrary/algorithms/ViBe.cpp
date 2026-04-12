@@ -46,10 +46,7 @@ void ViBe::process(const cv::Mat &img_input, cv::Mat &img_output, cv::Mat &img_b
   //vibe::libvibeModel_Sequential_Update_8u_C3R(model, model_img_input.data, img_output.data);
   vibe::libvibeModel_Sequential_Update_8u_C3R(model, img_input.data, img_output.data);
 
-#ifndef MEX_COMPILE_FLAG
-  if (showOutput)
-    cv::imshow(algorithmName + "_FG", img_output);
-#endif
+  // Foreground output is streamed over UDP in FrameProcessor (GStreamer).
 
   firstTime = false;
 }

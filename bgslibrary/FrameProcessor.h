@@ -29,6 +29,13 @@ namespace bgslibrary
     std::shared_ptr<tools::ForegroundMaskAnalysis> foregroundMaskAnalysis;
     bool enableForegroundMaskAnalysis = false;
 
+    cv::VideoWriter udpWriter;
+    bool udpWriterInitialized = false;
+    double outputFps = 30.0;
+    const std::string streamHost = "192.168.7.3";
+    const int streamPort = 5000;
+    bool enableUdpStreaming = true;
+
   public:
     FrameProcessor();
     ~FrameProcessor();
@@ -37,10 +44,13 @@ namespace bgslibrary
     std::string imgref;
 
     void init();
+    void setOutputFps(double fps) override;
     void process(const cv::Mat &img_input);
     void finish(void);
 
   private:
+    void initUdpWriter(const cv::Size &frameSize);
+    cv::Mat buildStreamFrame(const cv::Mat &img_input, const cv::Mat &img_output);
     void process(const std::string name, const std::shared_ptr<IBGS> &bgs, const cv::Mat &img_input, cv::Mat &img_bgs);
     void tic(std::string value);
     void toc();

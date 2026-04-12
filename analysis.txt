@@ -1,0 +1,423 @@
+ViBe    time(sec):0.069625
+ViBe    time(sec):0.069063
+ViBe    time(sec):0.068560
+ViBe    time(sec):0.068689
+ViBe    time(sec):0.068288
+ViBe    time(sec):0.069799
+ViBe    time(sec):0.068600
+ViBe    time(sec):0.070938
+ViBe    time(sec):0.068763
+ViBe    time(sec):0.068911
+ViBe    time(sec):0.068945
+ViBe    time(sec):0.068376
+ViBe    time(sec):0.068876
+ViBe    time(sec):0.068140
+ViBe    time(sec):0.069077
+ViBe    time(sec):0.071222
+ViBe    time(sec):0.068591
+ViBe    time(sec):0.069105
+ViBe    time(sec):0.068594
+ViBe    time(sec):0.068443
+ViBe    time(sec):0.068241
+ViBe    time(sec):0.068933
+ViBe    time(sec):0.068535
+ViBe    time(sec):0.068701
+ViBe    time(sec):0.069124
+ViBe    time(sec):0.069047
+ViBe    time(sec):0.069171
+ViBe    time(sec):0.068671
+ViBe    time(sec):0.069217
+ViBe    time(sec):0.068041
+ViBe    time(sec):0.072098
+ViBe    time(sec):0.069356
+ViBe    time(sec):0.068381
+ViBe    time(sec):0.068458
+ViBe    time(sec):0.068934
+ViBe    time(sec):0.068117
+ViBe    time(sec):0.069026
+ViBe    time(sec):0.068647
+ViBe    time(sec):0.072640
+ViBe    time(sec):0.068248
+ViBe    time(sec):0.069323
+ViBe    time(sec):0.068829
+ViBe    time(sec):0.069311
+ViBe    time(sec):0.068924
+ViBe    time(sec):0.068144
+ViBe    time(sec):0.069359
+ViBe    time(sec):0.068845
+ViBe    time(sec):0.068240
+ViBe    time(sec):0.068312
+ViBe    time(sec):0.068438
+ViBe    time(sec):0.068775
+ViBe    time(sec):0.068692
+ViBe    time(sec):0.068801
+ViBe    time(sec):0.073930
+ViBe    time(sec):0.069027
+ViBe    time(sec):0.068838
+ViBe    time(sec):0.073906
+ViBe    time(sec):0.083582
+ViBe    time(sec):0.085976
+ViBe    time(sec):0.095957
+ViBe    time(sec):0.109825
+ViBe    time(sec):0.110002
+ViBe    time(sec):0.114374
+ViBe    time(sec):0.115058
+ViBe    time(sec):0.115287
+ViBe    time(sec):0.110721
+ViBe    time(sec):0.109811
+ViBe    time(sec):0.102001
+ViBe    time(sec):0.098672
+ViBe    time(sec):0.096268
+ViBe    time(sec):0.093425
+ViBe    time(sec):0.091082
+ViBe    time(sec):0.094266
+ViBe    time(sec):0.086826
+ViBe    time(sec):0.085613
+ViBe    time(sec):0.083882
+ViBe    time(sec):0.082818
+ViBe    time(sec):0.081852
+ViBe    time(sec):0.080412
+ViBe    time(sec):0.085889
+ViBe    time(sec):0.080130
+ViBe    time(sec):0.079105
+ViBe    time(sec):0.078469
+ViBe    time(sec):0.077512
+ViBe    time(sec):0.077242
+ViBe    time(sec):0.077490
+ViBe    time(sec):0.077880
+ViBe    time(sec):0.076395
+ViBe    time(sec):0.075188
+ViBe    time(sec):0.075425
+ViBe    time(sec):0.077493
+ViBe    time(sec):0.074990
+ViBe    time(sec):0.075596
+ViBe    time(sec):0.079643
+ViBe    time(sec):0.074404
+ViBe    time(sec):0.073678
+ViBe    time(sec):0.073662
+ViBe    time(sec):0.073654
+[ViBe C3R Seg] over 100 frames:
+  clear_mask:       1.06%
+  first_hist:      34.49%
+  other_hists:     46.52%
+  buffer_search:   14.23%
+  make_output:      3.71%
+  buffer_search:    0.02% ms/frame
+[ViBe C3R] Seg vs Update (over 100 frames):
+  Seg:     88.33%  (16.323442 s total, 163.2344 ms/frame)
+  Update:  11.67%  (2.156262 s total, 21.7804 ms/frame)
+[ViBe C3R Update] over 100 frames:
+  interior:      98.94%
+  first_row:      0.32%
+  last_row:       0.33%
+  first_col:      0.21%
+  last_col:       0.17%
+  first_pixel:    0.03%
+ViBe    time(sec):0.076180
+ViBe    time(sec):0.073930
+ViBe    time(sec):0.076386
+ViBe    time(sec):0.073500
+ViBe    time(sec):0.082720
+ViBe    time(sec):0.088777
+ViBe    time(sec):0.096823
+ViBe    time(sec):0.105869
+ViBe    time(sec):0.112431
+ViBe    time(sec):0.120115
+ViBe    time(sec):0.124326
+ViBe    time(sec):0.123187
+ViBe    time(sec):0.117728
+ViBe    time(sec):0.112935
+ViBe    time(sec):0.112986
+ViBe    time(sec):0.103323
+ViBe    time(sec):0.100126
+ViBe    time(sec):0.097263
+ViBe    time(sec):0.095493
+ViBe    time(sec):0.093084
+ViBe    time(sec):0.102516
+ViBe    time(sec):0.104612
+ViBe    time(sec):0.111267
+ViBe    time(sec):0.118646
+ViBe    time(sec):0.122555
+ViBe    time(sec):0.124460
+ViBe    time(sec):0.128089
+ViBe    time(sec):0.117158
+ViBe    time(sec):0.109661
+ViBe    time(sec):0.106049
+ViBe    time(sec):0.101945
+ViBe    time(sec):0.101936
+ViBe    time(sec):0.095399
+ViBe    time(sec):0.091930
+ViBe    time(sec):0.090583
+ViBe    time(sec):0.089863
+ViBe    time(sec):0.088732
+ViBe    time(sec):0.089590
+ViBe    time(sec):0.086229
+ViBe    time(sec):0.084581
+ViBe    time(sec):0.083490
+ViBe    time(sec):0.082961
+ViBe    time(sec):0.082098
+ViBe    time(sec):0.080977
+ViBe    time(sec):0.086554
+ViBe    time(sec):0.079764
+ViBe    time(sec):0.079834
+ViBe    time(sec):0.079413
+ViBe    time(sec):0.079057
+ViBe    time(sec):0.078718
+ViBe    time(sec):0.078403
+ViBe    time(sec):0.081909
+ViBe    time(sec):0.078732
+ViBe    time(sec):0.077453
+ViBe    time(sec):0.077322
+ViBe    time(sec):0.077344
+ViBe    time(sec):0.077785
+ViBe    time(sec):0.076232
+ViBe    time(sec):0.080986
+ViBe    time(sec):0.076399
+ViBe    time(sec):0.076911
+ViBe    time(sec):0.076226
+ViBe    time(sec):0.076093
+ViBe    time(sec):0.074858
+ViBe    time(sec):0.076089
+ViBe    time(sec):0.075816
+ViBe    time(sec):0.074994
+ViBe    time(sec):0.074631
+ViBe    time(sec):0.074245
+ViBe    time(sec):0.074688
+ViBe    time(sec):0.072751
+ViBe    time(sec):0.073189
+ViBe    time(sec):0.073619
+ViBe    time(sec):0.073031
+ViBe    time(sec):0.072294
+ViBe    time(sec):0.071308
+ViBe    time(sec):0.071392
+ViBe    time(sec):0.071248
+ViBe    time(sec):0.071724
+ViBe    time(sec):0.070933
+ViBe    time(sec):0.076629
+ViBe    time(sec):0.070956
+ViBe    time(sec):0.069847
+ViBe    time(sec):0.069175
+ViBe    time(sec):0.069472
+ViBe    time(sec):0.069628
+ViBe    time(sec):0.069486
+ViBe    time(sec):0.069476
+ViBe    time(sec):0.071225
+ViBe    time(sec):0.068144
+ViBe    time(sec):0.069071
+ViBe    time(sec):0.068222
+ViBe    time(sec):0.069374
+ViBe    time(sec):0.069650
+ViBe    time(sec):0.068357
+ViBe    time(sec):0.073325
+ViBe    time(sec):0.076290
+ViBe    time(sec):0.081674
+ViBe    time(sec):0.095511
+ViBe    time(sec):0.106332
+[ViBe C3R Seg] over 200 frames:
+  clear_mask:       1.20%
+  first_hist:      33.49%
+  other_hists:     44.82%
+  buffer_search:   17.18%
+  make_output:      3.30%
+  buffer_search:    0.03% ms/frame
+[ViBe C3R] Seg vs Update (over 200 frames):
+  Seg:     89.51%  (34.447374 s total, 172.2369 ms/frame)
+  Update:  10.49%  (4.034946 s total, 20.2761 ms/frame)
+[ViBe C3R Update] over 200 frames:
+  interior:      98.88%
+  first_row:      0.36%
+  last_row:       0.26%
+  first_col:      0.29%
+  last_col:       0.18%
+  first_pixel:    0.03%
+ViBe    time(sec):0.113441
+ViBe    time(sec):0.116935
+ViBe    time(sec):0.114017
+ViBe    time(sec):0.105224
+ViBe    time(sec):0.098743
+ViBe    time(sec):0.093534
+ViBe    time(sec):0.089938
+ViBe    time(sec):0.087366
+ViBe    time(sec):0.086459
+ViBe    time(sec):0.084900
+ViBe    time(sec):0.083476
+ViBe    time(sec):0.082368
+ViBe    time(sec):0.081145
+ViBe    time(sec):0.079483
+ViBe    time(sec):0.082287
+ViBe    time(sec):0.078499
+ViBe    time(sec):0.077884
+ViBe    time(sec):0.077403
+ViBe    time(sec):0.076954
+ViBe    time(sec):0.076567
+ViBe    time(sec):0.075634
+ViBe    time(sec):0.078232
+ViBe    time(sec):0.075269
+ViBe    time(sec):0.075216
+ViBe    time(sec):0.074198
+ViBe    time(sec):0.075750
+ViBe    time(sec):0.073703
+ViBe    time(sec):0.074744
+ViBe    time(sec):0.077038
+ViBe    time(sec):0.074348
+ViBe    time(sec):0.074321
+ViBe    time(sec):0.074050
+ViBe    time(sec):0.073986
+ViBe    time(sec):0.074168
+ViBe    time(sec):0.073151
+ViBe    time(sec):0.073826
+ViBe    time(sec):0.075005
+ViBe    time(sec):0.073443
+ViBe    time(sec):0.072954
+ViBe    time(sec):0.073338
+ViBe    time(sec):0.072298
+ViBe    time(sec):0.071678
+ViBe    time(sec):0.072040
+ViBe    time(sec):0.077308
+ViBe    time(sec):0.070934
+ViBe    time(sec):0.071587
+ViBe    time(sec):0.071383
+ViBe    time(sec):0.071356
+ViBe    time(sec):0.070930
+ViBe    time(sec):0.072120
+ViBe    time(sec):0.071140
+ViBe    time(sec):0.071095
+ViBe    time(sec):0.070604
+ViBe    time(sec):0.069548
+ViBe    time(sec):0.069825
+ViBe    time(sec):0.070174
+ViBe    time(sec):0.069019
+ViBe    time(sec):0.068772
+ViBe    time(sec):0.075111
+ViBe    time(sec):0.069394
+ViBe    time(sec):0.069402
+ViBe    time(sec):0.069109
+ViBe    time(sec):0.068944
+ViBe    time(sec):0.068779
+ViBe    time(sec):0.068089
+ViBe    time(sec):0.068211
+ViBe    time(sec):0.070590
+ViBe    time(sec):0.068904
+ViBe    time(sec):0.068278
+ViBe    time(sec):0.068462
+ViBe    time(sec):0.068491
+ViBe    time(sec):0.068096
+ViBe    time(sec):0.067895
+ViBe    time(sec):0.072751
+ViBe    time(sec):0.069089
+ViBe    time(sec):0.069421
+ViBe    time(sec):0.067959
+ViBe    time(sec):0.068130
+ViBe    time(sec):0.068190
+ViBe    time(sec):0.068841
+ViBe    time(sec):0.068923
+ViBe    time(sec):0.072783
+ViBe    time(sec):0.068597
+ViBe    time(sec):0.068841
+ViBe    time(sec):0.069007
+ViBe    time(sec):0.068946
+ViBe    time(sec):0.068983
+ViBe    time(sec):0.068255
+ViBe    time(sec):0.068927
+ViBe    time(sec):0.076740
+ViBe    time(sec):0.083662
+ViBe    time(sec):0.095882
+ViBe    time(sec):0.104588
+ViBe    time(sec):0.106415
+ViBe    time(sec):0.106998
+ViBe    time(sec):0.110596
+ViBe    time(sec):0.118126
+ViBe    time(sec):0.125854
+ViBe    time(sec):0.122875
+ViBe    time(sec):0.119650
+[ViBe C3R Seg] over 300 frames:
+  clear_mask:       1.24%
+  first_hist:      33.60%
+  other_hists:     45.24%
+  buffer_search:   16.52%
+  make_output:      3.40%
+  buffer_search:    0.03% ms/frame
+[ViBe C3R] Seg vs Update (over 300 frames):
+  Seg:     89.58%  (51.394473 s total, 171.3149 ms/frame)
+  Update:  10.42%  (5.980592 s total, 20.0020 ms/frame)
+[ViBe C3R Update] over 300 frames:
+  interior:      98.99%
+  first_row:      0.30%
+  last_row:       0.22%
+  first_col:      0.27%
+  last_col:       0.18%
+  first_pixel:    0.03%
+ViBe    time(sec):0.123079
+ViBe    time(sec):0.112228
+ViBe    time(sec):0.107697
+ViBe    time(sec):0.102963
+ViBe    time(sec):0.098917
+ViBe    time(sec):0.095871
+ViBe    time(sec):0.100700
+ViBe    time(sec):0.091068
+ViBe    time(sec):0.088356
+ViBe    time(sec):0.086174
+ViBe    time(sec):0.085460
+ViBe    time(sec):0.084254
+ViBe    time(sec):0.083777
+ViBe    time(sec):0.083438
+ViBe    time(sec):0.080284
+ViBe    time(sec):0.080158
+ViBe    time(sec):0.078417
+ViBe    time(sec):0.077855
+ViBe    time(sec):0.078432
+ViBe    time(sec):0.077276
+ViBe    time(sec):0.077595
+ViBe    time(sec):0.077319
+ViBe    time(sec):0.077167
+ViBe    time(sec):0.076626
+ViBe    time(sec):0.077184
+ViBe    time(sec):0.075549
+ViBe    time(sec):0.076201
+ViBe    time(sec):0.075680
+ViBe    time(sec):0.075223
+ViBe    time(sec):0.074947
+ViBe    time(sec):0.075728
+ViBe    time(sec):0.074291
+ViBe    time(sec):0.076308
+ViBe    time(sec):0.073973
+ViBe    time(sec):0.076115
+ViBe    time(sec):0.074118
+ViBe    time(sec):0.074060
+ViBe    time(sec):0.073355
+ViBe    time(sec):0.073431
+ViBe    time(sec):0.074361
+ViBe    time(sec):0.073723
+ViBe    time(sec):0.075842
+ViBe    time(sec):0.072998
+ViBe    time(sec):0.072311
+ViBe    time(sec):0.072631
+ViBe    time(sec):0.071687
+ViBe    time(sec):0.072471
+ViBe    time(sec):0.072247
+ViBe    time(sec):0.077459
+ViBe    time(sec):0.070779
+ViBe    time(sec):0.072387
+ViBe    time(sec):0.070725
+ViBe    time(sec):0.071621
+ViBe    time(sec):0.070675
+ViBe    time(sec):0.071013
+ViBe    time(sec):0.070654
+ViBe    time(sec):0.068509
+ViBe    time(sec):0.070111
+ViBe    time(sec):0.069635
+ViBe    time(sec):0.069915
+ViBe    time(sec):0.069684
+ViBe    time(sec):0.069120
+ViBe    time(sec):0.067994
+ViBe    time(sec):0.074594
+ViBe    time(sec):0.068625
+ViBe    time(sec):0.068736
+ViBe    time(sec):0.069395
+ViBe    time(sec):0.069314
+ViBe    time(sec):0.068764
+ViBe    time(sec):0.069283
+ViBe    time(sec):0.069544
+ViBe    time(sec):0.075917
+ViBe    time(sec):0.069201
+ViBe    time(sec):0.068609

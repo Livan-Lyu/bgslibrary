@@ -15,6 +15,9 @@ namespace bgslibrary
     virtual ~IFrameProcessor() {
       //debug_destruction(IFrameProcessor);
     }
+    virtual void setOutputFps(double fps) {
+      (void)fps;
+    }
     virtual void process(const cv::Mat &input) = 0;
   };
 }
