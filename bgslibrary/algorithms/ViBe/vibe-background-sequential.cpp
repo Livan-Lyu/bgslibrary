@@ -53,6 +53,10 @@ namespace bgslibrary
       static inline void burn_compute_cycles_u32(uint32_t seed)
       {
   #if VIBE_DISTANCE_EXTRA_ITERS > 0
+          static uint32_t global_sync = 0; // 静态变量，用于后验
+          static uint64_t call_count = 0;  // 计数器
+
+
           uint32_t x = seed;
           for (uint32_t i = 0; i < VIBE_DISTANCE_EXTRA_ITERS; ++i) {
             // xorshift + LCG style integer mixing: ALU-heavy, no extra image memory IO.
@@ -61,6 +65,17 @@ namespace bgslibrary
             x ^= (x << 5);
             x = x * 1664525u + 1013904223u;
           }
+
+          // 关键：将结果累加到一个静态变量中，确保编译器认为 x 是“有用”的
+          global_sync += x;
+          call_count++;
+
+          // 每隔 1,000,000 次调用才打印一次（后验）
+          // 这个判断在大多数情况下只会增加一个寄存器比较指令，不占带宽
+          if ((call_count & 0xFFFFF) == 0) { 
+              printf("[POST-CHECK] Calls: %llu, Checksum: %u\n", call_count, global_sync);
+          }
+
   #if defined(__GNUC__) || defined(__clang__)
           // Keep computation alive without introducing memory reads/writes.
           asm volatile("" : "+r"(x));
@@ -83,7 +98,7 @@ namespace bgslibrary
           ((uint32_t)r2 << 3) ^ ((uint32_t)g2 << 2) ^ ((uint32_t)b2 << 1) ^ threshold
         );
         /* ================== END: EXPERIMENTAL BENCHMARK INJECTION ================== */
-        int32_t sum = abs_uint(r1 - r2) + abs_uint(g1 - g2) + abs_uint(b1 - b2);
+        uint32_t sum = abs_uint(r1 - r2) + abs_uint(g1 - g2) + abs_uint(b1 - b2);
         return ((2 * sum) <= (9 * threshold));
       }
 
