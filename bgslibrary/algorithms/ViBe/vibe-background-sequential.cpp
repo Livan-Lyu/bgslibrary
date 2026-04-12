@@ -52,26 +52,26 @@ namespace bgslibrary
       /* ==================== BEGIN: EXPERIMENTAL BENCHMARK INJECTION ==================== */
       static inline void burn_compute_cycles_u32(uint32_t seed)
       {
-#if VIBE_DISTANCE_EXTRA_ITERS > 0
-        uint32_t x = seed;
-        for (uint32_t i = 0; i < VIBE_DISTANCE_EXTRA_ITERS; ++i) {
-          // xorshift + LCG style integer mixing: ALU-heavy, no extra image memory IO.
-          x ^= (x << 13);
-          x ^= (x >> 17);
-          x ^= (x << 5);
-          x = x * 1664525u + 1013904223u;
-        }
-#if defined(__GNUC__) || defined(__clang__)
-        // Keep computation alive without introducing memory reads/writes.
-        asm volatile("" : "+r"(x));
-#else
-        // Fallback for non-GNU compilers. This may add a tiny memory side effect.
-        static volatile uint32_t sink = 0;
-        sink ^= x;
-#endif
-#else
-        (void)seed;
-#endif
+  #if VIBE_DISTANCE_EXTRA_ITERS > 0
+          uint32_t x = seed;
+          for (uint32_t i = 0; i < VIBE_DISTANCE_EXTRA_ITERS; ++i) {
+            // xorshift + LCG style integer mixing: ALU-heavy, no extra image memory IO.
+            x ^= (x << 13);
+            x ^= (x >> 17);
+            x ^= (x << 5);
+            x = x * 1664525u + 1013904223u;
+          }
+  #if defined(__GNUC__) || defined(__clang__)
+          // Keep computation alive without introducing memory reads/writes.
+          asm volatile("" : "+r"(x));
+  #else
+          // Fallback for non-GNU compilers. This may add a tiny memory side effect.
+          static volatile uint32_t sink = 0;
+          sink ^= x;
+  #endif
+  #else
+          (void)seed;
+  #endif
       }
       /* ===================== END: EXPERIMENTAL BENCHMARK INJECTION ===================== */
 
@@ -83,7 +83,8 @@ namespace bgslibrary
           ((uint32_t)r2 << 3) ^ ((uint32_t)g2 << 2) ^ ((uint32_t)b2 << 1) ^ threshold
         );
         /* ================== END: EXPERIMENTAL BENCHMARK INJECTION ================== */
-        return (abs_uint(r1 - r2) + abs_uint(g1 - g2) + abs_uint(b1 - b2) <= 4.5 * threshold);
+        int32_t sum = abs_uint(r1 - r2) + abs_uint(g1 - g2) + abs_uint(b1 - b2);
+        return ((2 * sum) <= (9 * threshold));
       }
 
       struct vibeModel_Sequential
