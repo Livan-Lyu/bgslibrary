@@ -566,3 +566,122 @@ events:
       Running the CXX compiler's linker: "/usr/bin/ld" "-v"
       GNU ld (GNU Binutils for Ubuntu) 2.42
 ...
+
+---
+events:
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/local/share/cmake-3.30/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "/usr/local/share/cmake-3.30/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "/usr/local/share/cmake-3.30/Modules/CheckCompilerFlag.cmake:52 (cmake_check_compiler_flag)"
+      - "/usr/local/share/cmake-3.30/Modules/GenerateExportHeader.cmake:238 (check_compiler_flag)"
+      - "/usr/local/share/cmake-3.30/Modules/GenerateExportHeader.cmake:419 (_test_compiler_hidden_visibility)"
+      - "CMakeLists.txt:149 (GENERATE_EXPORT_HEADER)"
+    checks:
+      - "Performing Test COMPILER_HAS_HIDDEN_VISIBILITY"
+    directories:
+      source: "/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-0pJCm5"
+      binary: "/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-0pJCm5"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "COMPILER_HAS_HIDDEN_VISIBILITY"
+      cached: true
+      stdout: |
+        Change Dir: '/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-0pJCm5'
+        
+        Run Build Command(s): /usr/local/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_20329/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_20329.dir/build.make CMakeFiles/cmTC_20329.dir/build
+        gmake[1]: Entering directory '/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-0pJCm5'
+        Building CXX object CMakeFiles/cmTC_20329.dir/src.cxx.o
+        /usr/bin/c++ -DCOMPILER_HAS_HIDDEN_VISIBILITY  -std=c++14 -fPIE   -fvisibility=hidden -o CMakeFiles/cmTC_20329.dir/src.cxx.o -c /home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-0pJCm5/src.cxx
+        Linking CXX executable cmTC_20329
+        /usr/local/bin/cmake -E cmake_link_script CMakeFiles/cmTC_20329.dir/link.txt --verbose=1
+        /usr/bin/c++ CMakeFiles/cmTC_20329.dir/src.cxx.o -o cmTC_20329
+        gmake[1]: Leaving directory '/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-0pJCm5'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/local/share/cmake-3.30/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "/usr/local/share/cmake-3.30/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "/usr/local/share/cmake-3.30/Modules/CheckCompilerFlag.cmake:52 (cmake_check_compiler_flag)"
+      - "/usr/local/share/cmake-3.30/Modules/GenerateExportHeader.cmake:239 (check_compiler_flag)"
+      - "/usr/local/share/cmake-3.30/Modules/GenerateExportHeader.cmake:419 (_test_compiler_hidden_visibility)"
+      - "CMakeLists.txt:149 (GENERATE_EXPORT_HEADER)"
+    checks:
+      - "Performing Test COMPILER_HAS_HIDDEN_INLINE_VISIBILITY"
+    directories:
+      source: "/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-uhZa0c"
+      binary: "/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-uhZa0c"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "COMPILER_HAS_HIDDEN_INLINE_VISIBILITY"
+      cached: true
+      stdout: |
+        Change Dir: '/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-uhZa0c'
+        
+        Run Build Command(s): /usr/local/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_f3874/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_f3874.dir/build.make CMakeFiles/cmTC_f3874.dir/build
+        gmake[1]: Entering directory '/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-uhZa0c'
+        Building CXX object CMakeFiles/cmTC_f3874.dir/src.cxx.o
+        /usr/bin/c++ -DCOMPILER_HAS_HIDDEN_INLINE_VISIBILITY  -std=c++14 -fPIE   -fvisibility-inlines-hidden -o CMakeFiles/cmTC_f3874.dir/src.cxx.o -c /home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-uhZa0c/src.cxx
+        Linking CXX executable cmTC_f3874
+        /usr/local/bin/cmake -E cmake_link_script CMakeFiles/cmTC_f3874.dir/link.txt --verbose=1
+        /usr/bin/c++ CMakeFiles/cmTC_f3874.dir/src.cxx.o -o cmTC_f3874
+        gmake[1]: Leaving directory '/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-uhZa0c'
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/usr/local/share/cmake-3.30/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "/usr/local/share/cmake-3.30/Modules/CheckSourceCompiles.cmake:77 (cmake_check_source_compiles)"
+      - "/usr/local/share/cmake-3.30/Modules/GenerateExportHeader.cmake:206 (check_source_compiles)"
+      - "/usr/local/share/cmake-3.30/Modules/GenerateExportHeader.cmake:263 (_check_cxx_compiler_attribute)"
+      - "/usr/local/share/cmake-3.30/Modules/GenerateExportHeader.cmake:420 (_test_compiler_has_deprecated)"
+      - "CMakeLists.txt:149 (GENERATE_EXPORT_HEADER)"
+    checks:
+      - "Performing Test COMPILER_HAS_DEPRECATED_ATTR"
+    directories:
+      source: "/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-jzmXE9"
+      binary: "/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-jzmXE9"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+    buildResult:
+      variable: "COMPILER_HAS_DEPRECATED_ATTR"
+      cached: true
+      stdout: |
+        Change Dir: '/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-jzmXE9'
+        
+        Run Build Command(s): /usr/local/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_c6b2e/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_c6b2e.dir/build.make CMakeFiles/cmTC_c6b2e.dir/build
+        gmake[1]: Entering directory '/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-jzmXE9'
+        Building CXX object CMakeFiles/cmTC_c6b2e.dir/src.cxx.o
+        /usr/bin/c++ -DCOMPILER_HAS_DEPRECATED_ATTR  -std=c++14 -fPIE -o CMakeFiles/cmTC_c6b2e.dir/src.cxx.o -c /home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-jzmXE9/src.cxx
+        /home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-jzmXE9/src.cxx: In function ‘int main()’:
+        /home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-jzmXE9/src.cxx:2:33: warning: ‘int somefunc()’ is deprecated [-Wdeprecated-declarations]
+            2 |     int main() { return somefunc();}
+              |                         ~~~~~~~~^~
+        /home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-jzmXE9/src.cxx:1:37: note: declared here
+            1 | __attribute__((__deprecated__)) int somefunc() { return 0; }
+              |                                     ^~~~~~~~
+        Linking CXX executable cmTC_c6b2e
+        /usr/local/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c6b2e.dir/link.txt --verbose=1
+        /usr/bin/c++ CMakeFiles/cmTC_c6b2e.dir/src.cxx.o -o cmTC_c6b2e
+        gmake[1]: Leaving directory '/home/livan/research/bgs/bgslibrary/build/CMakeFiles/CMakeScratch/TryCompile-jzmXE9'
+        
+      exitCode: 0
+...
