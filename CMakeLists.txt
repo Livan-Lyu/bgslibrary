@@ -76,6 +76,9 @@ if(UNIX)
 
   # if you like to have warinings about conversions, e.g. double->int or double->float etc., or float compare
   #ADD_DEFINITIONS(-Wconversion -Wfloat-equal)
+
+  # Native CPU optimization
+  add_compile_options(-march=native -mtune=native)
 endif(UNIX)
 
 # cmake -D BGS_CORE_STATIC=ON ..

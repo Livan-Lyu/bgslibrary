@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IBGS.h"
+#include "ViBe/vibe-fpga-shared.h"
 #include "ViBe/vibe-background-sequential.h"
 
 namespace bgslibrary
@@ -10,8 +11,8 @@ namespace bgslibrary
     class ViBe : public IBGS
     {
     private:
-      static const int DEFAULT_NUM_SAMPLES = 20;
-      static const int DEFAULT_MATCH_THRESH = 20;
+      static const int DEFAULT_NUM_SAMPLES = static_cast<int>(vibe::fpga::kHistoryFrames);
+      static const int DEFAULT_MATCH_THRESH = 90;
       static const int DEFAULT_MATCH_NUM = 2;
       static const int DEFAULT_UPDATE_FACTOR = 16;
 

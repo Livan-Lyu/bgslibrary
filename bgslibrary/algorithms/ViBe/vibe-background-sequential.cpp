@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "vibe-fpga-shared.h"
 #include "vibe-background-sequential.h"
 
 #define PROFILE_PRINT_INTERVAL 100
@@ -36,7 +37,7 @@ namespace bgslibrary
       static int32_t distance_is_close_8u_C3R(uint8_t r1, uint8_t g1, uint8_t b1, uint8_t r2, uint8_t g2, uint8_t b2, uint32_t threshold)
       {
         uint32_t sum = abs_uint(r1 - r2) + abs_uint(g1 - g2) + abs_uint(b1 - b2);
-        return ((2 * sum) <= (9 * threshold));
+        return (sum <= threshold);
       }
 
       struct vibeModel_Sequential
@@ -117,7 +118,7 @@ namespace bgslibrary
         assert(model != NULL);
 
         /* Default parameters values. */
-        model->numberOfSamples = 20;
+        model->numberOfSamples = fpga::kHistoryFrames;
         model->matchingThreshold = 20;
         model->matchingNumber = 2;
         model->updateFactor = 16;
@@ -724,7 +725,7 @@ namespace bgslibrary
               first[3 * index], first[3 * index + 1], first[3 * index + 2], matchingThreshold
             )
             )
-            segmentation_map[index] = matchingNumber;
+            segmentation_map[index] = matchingNumber; // 2
         }
         t1 = clock();
         g_c3_seg_first_hist += elapsed_sec(t0, t1); //first_hist: 20.12%
@@ -754,7 +755,7 @@ namespace bgslibrary
         uint8_t *swappingImageBuffer = historyImage + (model->lastHistoryImageSwapped) * (3 * width) * height;
 
         // Now, we move in the buffer and leave the historyImages
-        int numberOfTests = (model->numberOfSamples - NUMBER_OF_HISTORY_IMAGES);
+        int numberOfTests = (model->numberOfSamples - NUMBER_OF_HISTORY_IMAGES); // 20 frames are compared in total
 
         for (int index = width * height - 1; index >= 0; --index) {
           if (segmentation_map[index] > 0) {
