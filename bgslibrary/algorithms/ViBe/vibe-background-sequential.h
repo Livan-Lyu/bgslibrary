@@ -23,6 +23,42 @@ namespace bgslibrary
        * The code is designed to hide all the implementation details to the user to ease its use.
        */
       typedef struct vibeModel_Sequential vibeModel_Sequential_t;
+      typedef struct vibeHistoryView_Sequential vibeHistoryView_Sequential_t;
+      typedef struct vibeFpgaSharedMemoryView_Sequential vibeFpgaSharedMemoryView_Sequential_t;
+
+      /**
+       * Lightweight read-only view of the model history.
+       * The historyBuffer layout is pixel-major, with all samples for one pixel
+       * stored contiguously.
+       */
+      struct vibeHistoryView_Sequential
+      {
+        const uint8_t *historyBuffer;
+        uint32_t width;
+        uint32_t height;
+        uint32_t numberOfSamples;
+        uint32_t matchingThreshold;
+        uint32_t matchingNumber;
+      };
+
+      /**
+       * Shared-memory view used to simulate the CPU/FPGA exchange.
+       * Layout:
+       *   1. Packed 1-bit foreground flags, one bit per pixel.
+       *   2. Pixel-interleaved BGRX32 records:
+       *      current pixel, then all history samples for that pixel.
+       */
+      struct vibeFpgaSharedMemoryView_Sequential
+      {
+        uint8_t *buffer;
+        size_t totalBytes;
+        size_t foregroundBytes;
+        uint32_t width;
+        uint32_t height;
+        uint32_t numberOfSamples;
+        uint32_t matchingThreshold;
+        uint32_t matchingNumber;
+      };
 
       /**
        * Allocation of a new data structure where the background model will be stored.
@@ -124,6 +160,30 @@ namespace bgslibrary
        * @return
        */
       uint32_t libvibeModel_Sequential_GetUpdateFactor(const vibeModel_Sequential_t *model);
+
+      /**
+       * Exposes the current history buffer layout for testing and simulation.
+       *
+       * @param model The background subtraction model.
+       * @param view Output view descriptor filled on success.
+       * @return 0 on success, -1 on invalid input or uninitialized history.
+       */
+      int32_t libvibeModel_Sequential_GetHistoryView(
+        const vibeModel_Sequential_t *model,
+        vibeHistoryView_Sequential_t *view
+      );
+
+      /**
+       * Exposes the simulated shared-memory buffer used by the software/FPGA path.
+       *
+       * @param model The background subtraction model.
+       * @param view Output view descriptor filled on success.
+       * @return 0 on success, -1 on invalid input or uninitialized memory.
+       */
+      int32_t libvibeModel_Sequential_GetFpgaSharedMemoryView(
+        vibeModel_Sequential_t *model,
+        vibeFpgaSharedMemoryView_Sequential_t *view
+      );
 
       /**
        * \brief Frees all the memory used by the <tt>model</tt> and deallocates the structure.
