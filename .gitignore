@@ -36,3 +36,4 @@ bgslibrary_test_env
 .pixi/*
 !.pixi/config.toml
 pixi.lock
+build/

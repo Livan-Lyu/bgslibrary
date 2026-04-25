@@ -21,7 +21,7 @@ namespace bgslibrary
         const vibeFpgaSharedMemoryView_Sequential_t *view
       );
 
-      int32_t libvibeModel_Sequential_ReadFpgaForegroundMask_1b_C1R(
+      int32_t libvibeModel_Sequential_ReadFpgaForegroundMask_8u_C1R(
         const vibeFpgaSharedMemoryView_Sequential_t *view,
         uint8_t *segmentation_map
       );

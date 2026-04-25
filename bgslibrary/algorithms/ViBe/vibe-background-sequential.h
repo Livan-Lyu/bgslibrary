@@ -44,7 +44,7 @@ namespace bgslibrary
       /**
        * Shared-memory view used to simulate the CPU/FPGA exchange.
        * Layout:
-       *   1. Packed 1-bit foreground flags, one bit per pixel.
+       *   1. One byte per pixel storing a boolean foreground flag.
        *   2. Pixel-interleaved BGRX32 records:
        *      current pixel, then all history samples for that pixel.
        */
