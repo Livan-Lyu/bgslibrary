@@ -44,15 +44,22 @@ namespace bgslibrary
       /**
        * Shared-memory view used to simulate the CPU/FPGA exchange.
        * Layout:
-       *   1. One byte per pixel storing a boolean foreground flag.
-       *   2. Pixel-interleaved BGRX32 records:
-       *      current pixel, then all history samples for that pixel.
+       *   1. Current frame as BGRX32 pixels.
+       *   2. Linearized history frames as BGRX32 pixels.
+       *   3. One uint32_t comparison word per pixel.
+       *   4. A trailing ControlBlock.
        */
       struct vibeFpgaSharedMemoryView_Sequential
       {
         uint8_t *buffer;
         size_t totalBytes;
-        size_t foregroundBytes;
+        size_t frameOffset;
+        size_t historyOffset;
+        size_t outOffset;
+        size_t controlOffset;
+        size_t frameBytes;
+        size_t historyBytes;
+        size_t outBytes;
         uint32_t width;
         uint32_t height;
         uint32_t numberOfSamples;

@@ -24,6 +24,17 @@ namespace bgslibrary
         constexpr uint32_t kDmaAlignmentBytes = 64u;
         constexpr uint32_t kControlMagic = 0x56494245u;   // "VIBE"
         constexpr uint32_t kControlVersion = 1u;
+        constexpr uint32_t kApbRegisterSpanBytes = 0x1000u;
+
+        enum RegisterOffsets : uint32_t
+        {
+          kRegControl = 0x00u,
+          kRegControlBlockAddr = 0x04u,
+          kRegDebugPixelIndex = 0x08u,
+          kRegDebugHistoryIndex = 0x0Cu,
+          kRegDebugCompareWord = 0x10u,
+          kRegDebugErrorCode = 0x14u
+        };
 
         enum StatusFlags : uint32_t
         {
