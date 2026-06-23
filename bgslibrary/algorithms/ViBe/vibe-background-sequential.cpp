@@ -240,8 +240,11 @@ namespace bgslibrary
 
         if (model->fpgaDevMemFd < 0) {
           model->fpgaDevMemFd = open("/dev/mem", O_RDWR | O_SYNC);
-          if (model->fpgaDevMemFd < 0)
+          if (model->fpgaDevMemFd < 0) {
+            std::cerr << "[ViBe PDMA] ERROR: open(\"/dev/mem\") failed (errno="
+                      << errno << "). Run as root (sudo)." << std::endl;
             return false;
+          }
         }
 
         const off_t mapBase = static_cast<off_t>(ddr_phys_base & ~(static_cast<uint32_t>(pageSize) - 1u));
@@ -250,8 +253,12 @@ namespace bgslibrary
 
         void *map = mmap(NULL, mapBytes, PROT_READ | PROT_WRITE, MAP_SHARED,
                          model->fpgaDevMemFd, mapBase);
-        if (map == MAP_FAILED)
+        if (map == MAP_FAILED) {
+          std::cerr << "[ViBe PDMA] ERROR: mmap DDR buffer at 0x"
+                    << std::hex << ddr_phys_base << std::dec
+                    << " failed (errno=" << errno << ")." << std::endl;
           return false;
+        }
 
         model->fpgaDdrPhysBase = ddr_phys_base;
         model->fpgaDdrMapping = map;
@@ -273,8 +280,11 @@ namespace bgslibrary
 
         if (model->fpgaDevMemFd < 0) {
           model->fpgaDevMemFd = open("/dev/mem", O_RDWR | O_SYNC);
-          if (model->fpgaDevMemFd < 0)
+          if (model->fpgaDevMemFd < 0) {
+            std::cerr << "[ViBe PDMA] ERROR: open(\"/dev/mem\") failed (errno="
+                      << errno << "). Run as root (sudo)." << std::endl;
             return false;
+          }
         }
 
         const off_t mapBase = static_cast<off_t>(pixel_proc_phys & ~(static_cast<uint32_t>(pageSize) - 1u));
@@ -285,8 +295,12 @@ namespace bgslibrary
 
         void *map = mmap(NULL, mapBytes, PROT_READ | PROT_WRITE, MAP_SHARED,
                          model->fpgaDevMemFd, mapBase);
-        if (map == MAP_FAILED)
+        if (map == MAP_FAILED) {
+          std::cerr << "[ViBe PDMA] ERROR: mmap pixel_proc regs at 0x"
+                    << std::hex << pixel_proc_phys << std::dec
+                    << " failed (errno=" << errno << ")." << std::endl;
           return false;
+        }
 
         model->fpgaPixelProcPhysBase = pixel_proc_phys;
         model->fpgaPixelProcMapping = map;
@@ -1032,7 +1046,11 @@ namespace bgslibrary
 
           // Map pixel_proc registers (may fail; we retry in Segmentation).
 #if defined(__linux__)
-          map_pdma_pixel_proc_regs(model, model->fpgaPixelProcPhysBase);
+          if (!map_pdma_pixel_proc_regs(model, model->fpgaPixelProcPhysBase)) {
+            std::cerr << "[ViBe PDMA] WARNING: Cannot mmap pixel_proc registers at 0x"
+                      << std::hex << model->fpgaPixelProcPhysBase << std::dec
+                      << ". Are you root? Is the FPGA loaded?" << std::endl;
+          }
 #endif
 
           // Lambdas for the pixel-interleaved DDR layout.
@@ -1232,8 +1250,13 @@ namespace bgslibrary
 
           // Stage 1: ensure pixel_proc registers are mapped.
 #if defined(__linux__)
-          if (model->fpgaPixelProcRegs == NULL)
-            map_pdma_pixel_proc_regs(model, model->fpgaPixelProcPhysBase);
+          if (model->fpgaPixelProcRegs == NULL) {
+            if (!map_pdma_pixel_proc_regs(model, model->fpgaPixelProcPhysBase)) {
+              std::cerr << "[ViBe PDMA] ERROR: Cannot access pixel_proc at 0x"
+                        << std::hex << model->fpgaPixelProcPhysBase << std::dec
+                        << ". Run as root (sudo) and verify FPGA is loaded." << std::endl;
+            }
+          }
 #endif
 
           // Stage 2: refresh the current-frame entry (entry 0) for every
@@ -1253,8 +1276,12 @@ namespace bgslibrary
           const uint32_t ddrPhys = model->fpgaDdrPhysBase != 0u
               ? model->fpgaDdrPhysBase
               : 0u;
-          const bool launched = (model->fpgaPixelProcRegs != NULL)
-              && pdma_launch_pixel_proc(
+          if (model->fpgaPixelProcRegs == NULL) {
+            std::cerr << "[ViBe PDMA] ERROR: pixel_proc registers not mapped — "
+                      << "cannot launch FPGA. Segmentation will fail." << std::endl;
+            return(-1);
+          }
+          const bool launched = pdma_launch_pixel_proc(
                    model->fpgaDdrBuffer,
                    ddrPhys,
                    pixelCount,

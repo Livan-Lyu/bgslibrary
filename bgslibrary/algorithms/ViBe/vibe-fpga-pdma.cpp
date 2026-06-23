@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 
 #include "vibe-background-sequential.h"
 #include "vibe-fpga-pdma.h"
@@ -40,6 +41,12 @@ namespace bgslibrary
             volatile uint32_t *regs)
         {
           const uint32_t total_entries = total_pixels * fpga::kEntriesPerPixel;
+          const uint32_t report_step = total_entries / 10u;  // 10 progress steps
+
+          std::cerr << "[FPGA PDMA] CPU feeding " << total_entries
+                    << " entries (" << total_pixels << " pixels × "
+                    << fpga::kEntriesPerPixel << " entries/pixel)..." << std::endl;
+
           for (uint32_t i = 0u; i < total_entries; ++i) {
             // Read 4 bytes (little-endian RGBX) and write to PIXEL_DATA.
             const uint32_t word =
@@ -48,7 +55,13 @@ namespace bgslibrary
               (static_cast<uint32_t>(ddr_buffer[i * 4u + 2u]) << 16) |
               (static_cast<uint32_t>(ddr_buffer[i * 4u + 3u]) << 24);
             reg_write(regs, fpga::PixelProcReg::PIXEL_DATA, word);
+
+            if (report_step > 0u && (i % report_step) == 0u)
+              std::cerr << "[FPGA PDMA]   progress: " << (i / report_step * 10) << "%"
+                        << std::endl;
           }
+
+          std::cerr << "[FPGA PDMA] CPU feeding done." << std::endl;
         }
 
         // -----------------------------------------------------------------------
@@ -129,12 +142,28 @@ namespace bgslibrary
         const uint32_t remainder   = total_pixels % fpga::kResultBatchSize;
         const uint32_t total_batches = full_batches + (remainder > 0u ? 1u : 0u);
 
+        // Read poll limit from env (same convention as VIBE_FPGA_POLL_LIMIT).
+        const uint32_t pollLimit = []() -> uint32_t {
+          const char *v = getenv("VIBE_FPGA_POLL_LIMIT");
+          if (v == nullptr || *v == '\0') return 200000u;
+          return static_cast<uint32_t>(strtoul(v, nullptr, 0));
+        }();
+
         for (uint32_t batch = 0u; batch < total_batches; ++batch) {
-          // Wait for READY.
-          for (;;) {
-            const uint32_t status = reg_read(pixel_proc_regs, fpga::PixelProcReg::STATUS);
-            if ((status & static_cast<uint32_t>(fpga::PixelProcStatus::READY)) != 0u)
-              break;
+          // Wait for READY with timeout.
+          {
+            uint32_t poll = 0u;
+            for (; poll < pollLimit; ++poll) {
+              const uint32_t status = reg_read(pixel_proc_regs, fpga::PixelProcReg::STATUS);
+              if ((status & static_cast<uint32_t>(fpga::PixelProcStatus::READY)) != 0u)
+                break;
+            }
+            if (poll >= pollLimit) {
+              std::cerr << "[FPGA PDMA] ERROR: READY timeout after " << pollLimit
+                        << " polls (batch " << batch << "/" << total_batches
+                        << "). Is the FPGA loaded and clocked?" << std::endl;
+              return false;
+            }
           }
 
           // Read the 32 packed foreground bits.
@@ -159,11 +188,20 @@ namespace bgslibrary
           pixels_processed += batch_count;
         }
 
-        // 5. Wait for DONE.
-        for (;;) {
-          const uint32_t status = reg_read(pixel_proc_regs, fpga::PixelProcReg::STATUS);
-          if ((status & static_cast<uint32_t>(fpga::PixelProcStatus::DONE)) != 0u)
-            break;
+        // 5. Wait for DONE with timeout.
+        {
+          uint32_t poll = 0u;
+          for (; poll < pollLimit; ++poll) {
+            const uint32_t status = reg_read(pixel_proc_regs, fpga::PixelProcReg::STATUS);
+            if ((status & static_cast<uint32_t>(fpga::PixelProcStatus::DONE)) != 0u)
+              break;
+          }
+          if (poll >= pollLimit) {
+            std::cerr << "[FPGA PDMA] ERROR: DONE timeout after " << pollLimit
+                      << " polls. Pixels processed: " << pixels_processed
+                      << " / " << total_pixels << std::endl;
+            return false;
+          }
         }
 
         // 6. If PDMA was used, wait for it to finish.
