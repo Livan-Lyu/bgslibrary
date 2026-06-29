@@ -115,34 +115,25 @@ if(${OpenCV_VERSION} VERSION_LESS 2.3.1)
   message(FATAL_ERROR "OpenCV version is not compatible: ${OpenCV_VERSION}")
 endif()
 
-file(GLOB main_src bgslibrary/*.cpp bgslibrary/*.c)
-file(GLOB main_inc bgslibrary/*.h bgslibrary/*.hpp)
+file(GLOB main_src *.cpp *.c)
+file(GLOB main_inc *.h *.hpp)
 
-file(GLOB_RECURSE utils_src bgslibrary/utils/*.cpp bgslibrary/utils/*.c)
-file(GLOB_RECURSE utils_inc bgslibrary/utils/*.h bgslibrary/utils/*.hpp)
+file(GLOB_RECURSE utils_src utils/*.cpp utils/*.c)
+file(GLOB_RECURSE utils_inc utils/*.h utils/*.hpp)
 
-file(GLOB_RECURSE tools_src bgslibrary/tools/*.cpp bgslibrary/tools/*.c)
-file(GLOB_RECURSE tools_inc bgslibrary/tools/*.h bgslibrary/tools/*.hpp)
-
-file(GLOB_RECURSE bgs_src bgslibrary/algorithms/*.cpp bgslibrary/algorithms/*.c)
-file(GLOB_RECURSE bgs_inc bgslibrary/algorithms/*.h bgslibrary/algorithms/*.hpp)
+file(GLOB_RECURSE bgs_src algorithms/*.cpp algorithms/*.c)
+file(GLOB_RECURSE bgs_inc algorithms/*.h algorithms/*.hpp)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-# GMG is not available in older OpenCV versions
-if(${OpenCV_VERSION} VERSION_LESS 2.4.3)
-  file(GLOB gmg bgslibrary/algorithms/GMG.cpp)
-  list(REMOVE_ITEM bgs_src ${gmg})
-endif()
-
 if(BGS_CORE_STATIC)
   message(STATUS "Bulding bgslibrary_core STATIC")
-  add_library(bgslibrary_core STATIC ${bgs_src} ${tools_src} ${utils_src} ${bgs_inc} ${tools_inc} ${utils_inc})
+  add_library(bgslibrary_core STATIC ${bgs_src} ${utils_src} ${bgs_inc} ${utils_inc})
   #set_property(TARGET bgslibrary_core PROPERTY POSITION_INDEPENDENT_CODE ON)
 else()
   message(STATUS "Bulding bgslibrary_core SHARED")
-  add_library(bgslibrary_core SHARED ${bgs_src} ${tools_src} ${utils_src} ${bgs_inc} ${tools_inc} ${utils_inc})
+  add_library(bgslibrary_core SHARED ${bgs_src} ${utils_src} ${bgs_inc} ${utils_inc})
   target_link_libraries(bgslibrary_core ${OpenCV_LIBS})
   # generates the export header bgslibrary_core_EXPORTS.h automatically
   include(GenerateExportHeader)
@@ -151,7 +142,7 @@ else()
       EXPORT_MACRO_NAME bgslibrary_core_EXPORTS
       EXPORT_FILE_NAME bgslibrary_core_EXPORTS.h
       STATIC_DEFINE BGSLIBRARY_CORE_EXPORTS_BUILT_AS_STATIC)
-  #set_property(TARGET bgslibrary_core PROPERTY PUBLIC_HEADER ${bgs_inc} ${tools_inc} ${utils_inc})
+  #set_property(TARGET bgslibrary_core PROPERTY PUBLIC_HEADER ${bgs_inc} ${utils_inc})
 endif()
 
 #if(WIN32)
@@ -165,52 +156,6 @@ add_executable(bgslibrary ${main_src} ${main_inc})
 target_link_libraries(bgslibrary ${OpenCV_LIBS} bgslibrary_core)
 # set_target_properties(bgslibrary PROPERTIES OUTPUT_NAME bgs)
 
-include(GNUInstallDirs)
-set(INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/BGSLibrary)
-target_include_directories(bgslibrary_core
-  PUBLIC
-      $<INSTALL_INTERFACE:include>)
-
-
-install(TARGETS bgslibrary_core
-  bgslibrary
-  EXPORT bgslibrary_core-targets
-  RUNTIME DESTINATION bin COMPONENT app
-  LIBRARY DESTINATION lib COMPONENT runtime
-  ARCHIVE DESTINATION lib COMPONENT runtime
-  #PUBLIC_HEADER DESTINATION include/bgslibrary COMPONENT dev
-  FRAMEWORK DESTINATION "/Library/Frameworks"
-)
-set_target_properties(bgslibrary_core PROPERTIES EXPORT_NAME BGSLibrary)
-
-install(DIRECTORY bgslibrary/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/bgslibrary)
-install(EXPORT bgslibrary_core-targets
-  FILE
-    BGSLibraryTargets.cmake
-  NAMESPACE
-    BGSLibrary::
-  DESTINATION
-    ${INSTALL_CONFIGDIR}
-)
-
-include(CMakePackageConfigHelpers)
-write_basic_package_version_file(
-  ${CMAKE_CURRENT_BINARY_DIR}/BGSLibraryConfigVersion.cmake
-  VERSION ${PROJECT_VERSION}
-  COMPATIBILITY AnyNewerVersion
-)
-
-configure_package_config_file(${CMAKE_CURRENT_LIST_DIR}/cmake-modules/BGSLibraryConfig.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/BGSLibraryConfig.cmake
-  INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
-)
-
-install(FILES
-  ${CMAKE_CURRENT_LIST_DIR}/cmake-modules/FindOpenCV.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/BGSLibraryConfig.cmake
-  ${CMAKE_CURRENT_BINARY_DIR}/BGSLibraryConfigVersion.cmake
-  DESTINATION ${INSTALL_CONFIGDIR}
-)
 
 if(UNIX)
   # to avoid: error while loading shared libraries: libbgslibrary_core.so
