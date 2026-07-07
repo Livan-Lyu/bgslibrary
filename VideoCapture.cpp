@@ -20,7 +20,7 @@ namespace bgslibrary
     int numOfRec = 0;
     bool startDraw = false;
     bool roi_defined = false;
-    bool use_roi = true;
+    bool use_roi = false;
     bool disable_event = false;
 
     void reset(void)
@@ -155,7 +155,7 @@ namespace bgslibrary
 
       // 设置输入帧的放缩比率
       // 目前测试设置为 640*360
-      cv::resize(frame, frame, cv::Size(), 640, 360);
+      cv::resize(frame, frame, cv::Size(), 640 / frame.size().width, 360 / frame.size().height);
       //cv::resize(frame, frame, cv::Size(), input_resize_percent/100., input_resize_percent / 100.);
 
       if (firstTime)

@@ -1,5 +1,10 @@
 #include <iostream>
 
+// use to debug
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <execinfo.h>
+
 #include "utils/GenericKeys.h"
 #include "VideoAnalysis.h"
 
@@ -60,8 +65,29 @@ namespace bgslibrary
   };
 }
 
+void print_trace() {
+    void* array[10];
+    size_t size = backtrace(array, 10);
+    char** strings = backtrace_symbols(array, size);
+    std::cerr << "--- 崩溃调用栈位置 ---" << std::endl;
+    for (size_t i = 0; i < size; i++) {
+        std::cerr << strings[i] << std::endl;
+    }
+    free(strings);
+}
+
 int main(int argc, const char **argv)
 {
+  try {
   bgslibrary::Main::start(argc, argv);
+  } 
+    catch (const cv::Exception& e) {
+        std::cerr << "捕获到 OpenCV 异常: " << e.what() << std::endl;
+        print_trace(); // 强制在这里打印是谁一路调用过来的
+    }
+    catch (const std::exception& e) {
+        std::cerr << "捕获到标准异常: " << e.what() << std::endl;
+        print_trace();
+    }
   return 0;
 }
