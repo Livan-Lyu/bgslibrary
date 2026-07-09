@@ -147,9 +147,17 @@ namespace bgslibrary
       }
 
       // =========================================================================
-      // pixel_proc /dev/mem mapping
+      // pixel_proc register mapping — UIO first, /dev/mem fallback
       // =========================================================================
 #if defined(__linux__)
+      static const char* get_uio_device()
+      {
+        const char *uio = getenv("VIBE_FPGA_UIO");
+        if (uio != NULL && *uio != '\0')
+          return uio;
+        return "/dev/uio0";
+      }
+
       static bool map_pixel_proc_regs(vibeModel_Sequential_t *model)
       {
         if (model == NULL)
@@ -158,31 +166,64 @@ namespace bgslibrary
         if (model->fpgaPixelProcRegs != NULL)
           return true;  // already mapped
 
-        const long pageSize = sysconf(_SC_PAGESIZE);
-        if (pageSize <= 0)
-          return false;
+        int fd = -1;
+        void *mapping = MAP_FAILED;
+        size_t mapBytes = 0x1000u;  // UIO: 4 KB region; /dev/mem: at least 0x100
 
-        // mmap at CAPE base (0x41100000)
-        const uint32_t capeBase = kPixelProcPhysBase;
-        const off_t mapBase = static_cast<off_t>(capeBase & ~(static_cast<uint32_t>(pageSize) - 1u));
-        const size_t mapDelta = static_cast<size_t>(capeBase - static_cast<uint32_t>(mapBase));
-        const size_t mapBytes = fpga::AlignUp(0x100u + mapDelta, static_cast<size_t>(pageSize));
+        // ---- Try UIO first ----
+        const char *uioPath = get_uio_device();
+        fd = open(uioPath, O_RDWR | O_SYNC);
+        if (fd >= 0) {
+          // UIO mmap: offset=0 maps the entire device region starting at the
+          // physical base address (0x41280000).  No page alignment math needed.
+          // regRead/regWrite use absolute offsets (0x80, 0x84, ...) from CAPE
+          // base, so fpgaPixelProcRegs must point to the UIO mapping start.
+          mapping = mmap(NULL, mapBytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+          if (mapping != MAP_FAILED) {
+            model->fpgaPixelProcRegs = reinterpret_cast<volatile uint32_t*>(mapping);
 
-        int fd = open("/dev/mem", O_RDWR | O_SYNC);
-        if (fd < 0)
-          return false;
-
-        void *mapping = mmap(NULL, mapBytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, mapBase);
-        if (mapping == MAP_FAILED) {
+            std::cout << "[ViBe] pixel_proc mapped via " << uioPath
+                      << " (base 0x" << std::hex << kPixelProcPhysBase << std::dec << ")"
+                      << std::endl;
+            goto mapped;
+          }
           close(fd);
-          return false;
+          fd = -1;
         }
 
+        // ---- Fallback: /dev/mem ----
+        {
+          const long pageSize = sysconf(_SC_PAGESIZE);
+          if (pageSize <= 0)
+            return false;
+
+          const uint32_t capeBase = kPixelProcPhysBase;
+          const off_t mapBase = static_cast<off_t>(capeBase & ~(static_cast<uint32_t>(pageSize) - 1u));
+          const size_t mapDelta = static_cast<size_t>(capeBase - static_cast<uint32_t>(mapBase));
+          mapBytes = fpga::AlignUp(0x100u + mapDelta, static_cast<size_t>(pageSize));
+
+          fd = open("/dev/mem", O_RDWR | O_SYNC);
+          if (fd < 0)
+            return false;
+
+          mapping = mmap(NULL, mapBytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, mapBase);
+          if (mapping == MAP_FAILED) {
+            close(fd);
+            return false;
+          }
+
+          // /dev/mem: fpgaPixelProcRegs points to CAPE base + delta.
+          // regRead/regWrite use absolute offsets (0x80, 0x84, ...).
+          model->fpgaPixelProcRegs = reinterpret_cast<volatile uint32_t*>(
+            reinterpret_cast<uint8_t*>(mapping) + mapDelta);
+
+          std::cout << "[ViBe] pixel_proc mapped via /dev/mem (fallback)" << std::endl;
+        }
+
+      mapped:
         model->fpgaDevMemFd = fd;
         model->fpgaPixelProcMapping = mapping;
         model->fpgaPixelProcMappingBytes = mapBytes;
-        model->fpgaPixelProcRegs = reinterpret_cast<volatile uint32_t*>(
-          reinterpret_cast<uint8_t*>(mapping) + mapDelta);
         return true;
       }
 
