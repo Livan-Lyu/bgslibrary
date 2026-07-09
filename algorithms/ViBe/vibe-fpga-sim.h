@@ -15,13 +15,13 @@ namespace bgslibrary
       constexpr uint32_t kHistoryFramesHw = 23u;       // 24 entries = 1 current + 23 history
       constexpr size_t   kDdrBytesPerPixel = 96u;       // 24 entries × 4 bytes (RGBX)
       constexpr uint32_t kHardwareSadThreshold = 45u;   // SAD ≤ 45 is a match
-      constexpr uint32_t kHardwareMatchingNumber = 3u;  // match_count > 2 → background
+      constexpr uint32_t kHardwareMatchingNumber = 2u;  // match_count >= 2 → background
       constexpr uint32_t kPixelsPerBatch = 32u;         // FPGA packs 32 results per RESULT read
 
       // =========================================================================
       // CAPE base address (mmap target for all pixel_proc registers)
       // =========================================================================
-      constexpr uint32_t kPixelProcPhysBase = 0x41100000u;  // CAPE APB slot
+      constexpr uint32_t kPixelProcPhysBase = 0x41280000u;  // CAPE APB slot
 
       // =========================================================================
       // Register offsets (absolute, relative to CAPE base 0x41100000).
