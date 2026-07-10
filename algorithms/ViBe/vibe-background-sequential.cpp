@@ -470,6 +470,7 @@ namespace bgslibrary
         
         // ---- MMIO: map pixel_proc registers, optionally remap DDR to physical ----
         if (model->fpgaUseMmio) {
+          std::cout << "checking for UIO device..." << std::endl;
 #if defined(__linux__)
           if (!map_pixel_proc_regs(model)) {
             model->fpgaUseMmio = false;  // fall back to sim
@@ -479,6 +480,7 @@ namespace bgslibrary
               map_ddr_buffer(model, ddrPhys);
             }
           }
+          std::cout << "check done" << std::endl;
 #else
           model->fpgaUseMmio = false;
 #endif

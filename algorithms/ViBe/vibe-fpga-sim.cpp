@@ -70,12 +70,12 @@ namespace bgslibrary
         g_state.segmentationMap = segmentationMap;
         g_state.nextPixelIndex  = 0u;
 
-        std::cerr
-          << "[FPGA-SIM] init frame=" << g_frameCounter
-          << " totalPixels=" << totalPixels
-          << " threshold=" << sadThreshold
-          << " matchingNum=" << matchingNumber
-          << std::endl;
+        // std::cerr
+        //   << "[FPGA-SIM] init frame=" << g_frameCounter
+        //   << " totalPixels=" << totalPixels
+        //   << " threshold=" << sadThreshold
+        //   << " matchingNum=" << matchingNumber
+        //   << std::endl;
       }
 
       // =========================================================================
@@ -93,7 +93,7 @@ namespace bgslibrary
 
         if (g_state.nextPixelIndex >= g_state.totalPixels) {
           regs->status = kStatusDone;
-          std::cerr << "[FPGA-SIM] done frame=" << g_frameCounter << std::endl;
+          // std::cerr << "[FPGA-SIM] done frame=" << g_frameCounter << std::endl;
           ++g_frameCounter;
           return;
         }
@@ -129,12 +129,12 @@ namespace bgslibrary
         regs->result = batchResult;
         regs->status = kStatusBusy | kStatusReady;
 
-        std::cerr
-          << "[FPGA-SIM] tick frame=" << g_frameCounter
-          << " batch_start=" << batchStart
-          << " batch_count=" << batchCount
-          << " result=0x" << std::hex << batchResult << std::dec
-          << std::endl;
+        // std::cerr
+        //   << "[FPGA-SIM] tick frame=" << g_frameCounter
+        //   << " batch_start=" << batchStart
+        //   << " batch_count=" << batchCount
+        //   << " result=0x" << std::hex << batchResult << std::dec
+        //   << std::endl;
       }
 
       // =========================================================================
