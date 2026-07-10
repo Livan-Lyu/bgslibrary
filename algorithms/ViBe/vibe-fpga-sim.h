@@ -21,11 +21,11 @@ namespace bgslibrary
       // =========================================================================
       // CAPE base address (mmap target for all pixel_proc registers)
       // =========================================================================
-      constexpr uint32_t kPixelProcPhysBase   = 0x41280000u;  // CAPE APB slot
+      constexpr uint32_t kPixelProcPhysBase   = 0x41300000u;  // CAPE APB slot
       constexpr uint32_t kPixelProcRegOffset  = 0x80u;        // pixel_proc offset within CAPE
 
       // =========================================================================
-      // Register offsets (absolute, relative to CAPE base 0x41100000).
+      // Register offsets (absolute, relative to CAPE base 0x41300000).
       // Word index = offset / 4.  mmap at CAPE_BASE → REG(offset) = base[offset/4].
       // =========================================================================
       enum PixelProcReg : uint32_t

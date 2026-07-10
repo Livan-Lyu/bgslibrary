@@ -175,7 +175,7 @@ namespace bgslibrary
         fd = open(uioPath, O_RDWR | O_SYNC);
         if (fd >= 0) {
           // UIO mmap: offset=0 maps the entire device region starting at the
-          // physical base address (0x41280000).  No page alignment math needed.
+          // physical base address (0x41300000).  No page alignment math needed.
           // regRead/regWrite use absolute offsets (0x80, 0x84, ...) from CAPE
           // base, so fpgaPixelProcRegs must point to the UIO mapping start.
           mapping = mmap(NULL, mapBytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
