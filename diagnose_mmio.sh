@@ -13,7 +13,7 @@ fail()  { echo -e "${RED}[FAIL]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 info()  { echo -e "       $*"; }
 
-CAPE_BASE=0x41280000
+CAPE_BASE=0x4130000
 UIO_DEV=""
 
 echo "=============================================="
