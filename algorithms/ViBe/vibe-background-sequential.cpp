@@ -172,7 +172,10 @@ namespace bgslibrary
 
         // ---- Try UIO first ----
         const char *uioPath = get_uio_device();
-        fd = open(uioPath, O_RDWR | O_SYNC);
+        fd = open(uioPath, O_RDWR);
+        if (fd < 0) {
+            std::cerr << "UIO open failed: " << strerror(errno) << std::endl;
+        }
         if (fd >= 0) {
           // UIO mmap: offset=0 maps the entire device region starting at the
           // physical base address (0x41300000).  No page alignment math needed.
