@@ -81,6 +81,23 @@ namespace bgslibrary
         return regs[offset >> 2];
       }
 
+      static void dump_pixel_proc_regs(volatile uint32_t *regs, const char *tag)
+      {
+        if (regs == NULL)
+          return;
+
+        const uint32_t ctrl   = regRead(regs, REG_CONTROL);
+        const uint32_t status = regRead(regs, REG_STATUS);
+        const uint32_t srcLo  = regRead(regs, REG_SRC_ADDR_LO);
+        const uint32_t srcHi  = regRead(regs, REG_SRC_ADDR_HI);
+        const uint32_t count  = regRead(regs, REG_PIXEL_COUNT);
+        const uint32_t debug  = regRead(regs, REG_DEBUG);
+
+        fprintf(stderr,
+          "[pixel_proc:%s] CTRL=0x%08X STAT=0x%08X SRC_LO=0x%08X SRC_HI=0x%08X CNT=%u DBG=0x%08X\n",
+          tag, ctrl, status, srcLo, srcHi, count, debug);
+      }
+
       // =========================================================================
       // pixel_proc register mapping — UIO first, /dev/mem fallback
       // =========================================================================
@@ -381,6 +398,7 @@ namespace bgslibrary
           fprintf(stderr, "[ViBe] FATAL: failed to map pixel_proc registers\n");
           assert(0 && "map_pixel_proc_regs failed");
         }
+        dump_pixel_proc_regs(model->fpgaPixelProcRegs, "after-map");
 
         // Optionally remap DDR buffer to physical address.
         uint32_t ddrPhys = env_u32_hex_or_dec("VIBE_FPGA_DDR_BASE", 0u);
@@ -479,6 +497,7 @@ namespace bgslibrary
         regWrite(regs, REG_SRC_ADDR_HI, static_cast<uint32_t>(ddrPhys >> 32));
         regWrite(regs, REG_PIXEL_COUNT, pixelCount);
         regWrite(regs, REG_CONTROL, kControlStart);
+        dump_pixel_proc_regs(regs, "after-start");
 
         // ---- Stage 3: Batch loop ----
         auto updateHistoryForPixel = [&](uint32_t pixelIndex) {
@@ -504,7 +523,13 @@ namespace bgslibrary
             uint32_t status;
             do {
               status = regRead(regs, REG_STATUS);
-              if (++poll >= maxPolls) { done = 1u; break; }
+              if ((poll == 0u) || ((poll % 4096u) == 0u))
+                dump_pixel_proc_regs(regs, "poll");
+              if (++poll >= maxPolls) {
+                dump_pixel_proc_regs(regs, "timeout");
+                done = 1u;
+                break;
+              }
               if ((poll % 128u) == 0u) usleep(10);
             } while (!(status & (kStatusIrq | kStatusDone)));
             if (done) break;
