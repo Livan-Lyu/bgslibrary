@@ -1,16 +1,11 @@
 #include <assert.h>
-#include <iostream>
-#include <stdio.h>
-#include <string.h>
-
-#if defined(__linux__)
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#endif
 
-#include "vibe-fpga-sim.h"
 #include "vibe-fpga-shared.h"
 #include "vibe-background-sequential.h"
 
@@ -23,20 +18,6 @@ namespace bgslibrary
       // =========================================================================
       // Utilities
       // =========================================================================
-      static inline uint32_t seeded_sample_count(const uint32_t numberOfSamples)
-      {
-        return (numberOfSamples < NUMBER_OF_HISTORY_IMAGES)
-          ? numberOfSamples
-          : NUMBER_OF_HISTORY_IMAGES;
-      }
-
-      static inline bool fpga_transport_use_mmio()
-      {
-        // const char *mode = getenv("VIBE_FPGA_TRANSPORT");
-        // return mode != NULL && strcmp(mode, "mmio") == 0;
-        return true;  // default to MMIO for now
-      }
-
       static inline uint32_t env_u32_hex_or_dec(const char *name, const uint32_t defaultValue)
       {
         const char *value = getenv(name);
@@ -65,23 +46,19 @@ namespace bgslibrary
         /* Storage for the history. */
         uint32_t lastHistorySampleSwapped;
 
-        // ---- pixel_proc / DDR buffer (MMIO + sim paths) ----
+        /* DDR buffer (pixel-interleaved RGBX, 96 bytes/pixel). */
         uint8_t  *fpgaDdrBuffer;
         size_t    fpgaDdrBufferBytes;
         uint32_t  fpgaDdrPhysBase;        // 0 = heap, else physical address via /dev/mem
         void     *fpgaDdrMapping;
         size_t    fpgaDdrMappingBytes;
 
-        // ---- pixel_proc registers ----
-        bool               fpgaUseMmio;
-        volatile uint32_t *fpgaPixelProcRegs;   // mmap'd hardware regs (MMIO path, NULL for sim)
+        /* pixel_proc registers (mmap'd via UIO or /dev/mem). */
+        volatile uint32_t *fpgaPixelProcRegs;
         void              *fpgaPixelProcMapping;
         size_t             fpgaPixelProcMappingBytes;
         int                fpgaDevMemFd;
         uint64_t           fpgaFrameSequence;
-
-        // ---- Software register file (sim path only) ----
-        PixelProcSimRegs   fpgaSimRegs;
 
         /* Buffers with random values. */
         uint32_t *jump;
@@ -90,67 +67,23 @@ namespace bgslibrary
       };
 
       // =========================================================================
-      // pixel_proc register I/O
+      // Hardware register I/O
       // =========================================================================
-#if defined(__linux__)
-      static inline void hw_reg_write(volatile uint32_t *regs, uint32_t offset, uint32_t value)
+      static inline void regWrite(volatile uint32_t *regs, uint32_t offset, uint32_t value)
       {
         regs[offset >> 2] = value;
         __sync_synchronize();
       }
 
-      static inline uint32_t hw_reg_read(volatile uint32_t *regs, uint32_t offset)
+      static inline uint32_t regRead(volatile uint32_t *regs, uint32_t offset)
       {
         __sync_synchronize();
         return regs[offset >> 2];
-      }
-#endif
-
-      // Unified register accessors (dispatch on MMIO vs sim).
-      static inline void regWrite(vibeModel_Sequential_t *model, uint32_t offset, uint32_t value)
-      {
-        if (model->fpgaUseMmio) {
-#if defined(__linux__)
-          hw_reg_write(model->fpgaPixelProcRegs, offset, value);
-#endif
-        } else {
-          switch (offset) {
-            case REG_CONTROL:      model->fpgaSimRegs.control = value; break;
-            case REG_STATUS:       /* RO */ break;
-            case REG_SRC_ADDR_LO:  /* sim ignores */ break;
-            case REG_SRC_ADDR_HI:  /* sim ignores */ break;
-            case REG_PIXEL_COUNT:  model->fpgaSimRegs.pixelCount = value; break;
-            case REG_RESULT:       /* RO */ break;
-            default: break;
-          }
-        }
-      }
-
-      static inline uint32_t regRead(vibeModel_Sequential_t *model, uint32_t offset)
-      {
-        if (model->fpgaUseMmio) {
-#if defined(__linux__)
-          return hw_reg_read(model->fpgaPixelProcRegs, offset);
-#else
-          return 0u;
-#endif
-        } else {
-          switch (offset) {
-            case REG_CONTROL:      return model->fpgaSimRegs.control;
-            case REG_STATUS:       return model->fpgaSimRegs.status;
-            case REG_SRC_ADDR_LO:  return 0u;
-            case REG_SRC_ADDR_HI:  return 0u;
-            case REG_PIXEL_COUNT:  return model->fpgaSimRegs.pixelCount;
-            case REG_RESULT:       return model->fpgaSimRegs.result;
-            default: return 0u;
-          }
-        }
       }
 
       // =========================================================================
       // pixel_proc register mapping — UIO first, /dev/mem fallback
       // =========================================================================
-#if defined(__linux__)
       static const char* get_uio_device()
       {
         const char *uio = getenv("VIBE_FPGA_UIO");
@@ -169,26 +102,15 @@ namespace bgslibrary
 
         int fd = -1;
         void *mapping = MAP_FAILED;
-        size_t mapBytes = 0x1000u;  // UIO: 4 KB region; /dev/mem: at least 0x100
+        size_t mapBytes = 0x1000u;
 
         // ---- Try UIO first ----
         const char *uioPath = get_uio_device();
         fd = open(uioPath, O_RDWR);
-        if (fd < 0) {
-            std::cerr << "UIO open failed: " << strerror(errno) << std::endl;
-        }
         if (fd >= 0) {
-          // UIO mmap: offset=0 maps the entire device region starting at the
-          // physical base address (0x41300000).  No page alignment math needed.
-          // regRead/regWrite use absolute offsets (0x80, 0x84, ...) from CAPE
-          // base, so fpgaPixelProcRegs must point to the UIO mapping start.
           mapping = mmap(NULL, mapBytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
           if (mapping != MAP_FAILED) {
             model->fpgaPixelProcRegs = reinterpret_cast<volatile uint32_t*>(mapping);
-
-            std::cout << "[ViBe] pixel_proc mapped via " << uioPath
-                      << " (base 0x" << std::hex << kPixelProcPhysBase << std::dec << ")"
-                      << std::endl;
             goto mapped;
           }
           close(fd);
@@ -216,12 +138,8 @@ namespace bgslibrary
             return false;
           }
 
-          // /dev/mem: fpgaPixelProcRegs points to CAPE base + delta.
-          // regRead/regWrite use absolute offsets (0x80, 0x84, ...).
           model->fpgaPixelProcRegs = reinterpret_cast<volatile uint32_t*>(
             reinterpret_cast<uint8_t*>(mapping) + mapDelta);
-
-          std::cout << "[ViBe] pixel_proc mapped via /dev/mem (fallback)" << std::endl;
         }
 
       mapped:
@@ -295,7 +213,6 @@ namespace bgslibrary
           model->fpgaDevMemFd = -1;
         }
       }
-#endif
 
       // =========================================================================
       // Print parameters
@@ -344,10 +261,6 @@ namespace bgslibrary
         model->fpgaPixelProcMappingBytes= 0u;
         model->fpgaDevMemFd             = -1;
         model->fpgaFrameSequence        = 0u;
-        model->fpgaUseMmio              = fpga_transport_use_mmio();
-
-        /* Sim register file (always zeroed; only used when !fpgaUseMmio). */
-        memset(&model->fpgaSimRegs, 0, sizeof(model->fpgaSimRegs));
 
         /* Buffers with random values. */
         model->jump     = NULL;
@@ -426,11 +339,7 @@ namespace bgslibrary
         if (model == NULL)
           return(-1);
 
-#if defined(__linux__)
         unmap_pixel_proc(model);
-#else
-        free(model->fpgaDdrBuffer);
-#endif
         free(model->jump);
         free(model->neighbor);
         free(model->position);
@@ -440,7 +349,7 @@ namespace bgslibrary
       }
 
       // =========================================================================
-      // AllocInit C3R — unified MMIO + sim path with DDR buffer
+      // AllocInit C3R — MMIO path with DDR buffer
       // =========================================================================
       int32_t libvibeModel_Sequential_AllocInit_8u_C3R(
         vibeModel_Sequential_t *model,
@@ -455,12 +364,10 @@ namespace bgslibrary
         model->height = height;
         model->lastHistorySampleSwapped = 0u;
 
-        // If MMIO, override software defaults with hardware-fixed parameters.
-        if (model->fpgaUseMmio) {
-          model->numberOfSamples   = kHistoryFramesHw;
-          model->matchingThreshold = kHardwareSadThreshold;
-          model->matchingNumber    = kHardwareMatchingNumber;
-        }
+        // Override defaults with hardware-fixed parameters.
+        model->numberOfSamples   = kHistoryFramesHw;
+        model->matchingThreshold = kHardwareSadThreshold;
+        model->matchingNumber    = kHardwareMatchingNumber;
 
         const uint32_t pixelCount = width * height;
 
@@ -468,29 +375,20 @@ namespace bgslibrary
         model->fpgaDdrBufferBytes = DdrPixelLayout::totalBytes(pixelCount);
         model->fpgaDdrBuffer = (uint8_t*)malloc(model->fpgaDdrBufferBytes);
         assert(model->fpgaDdrBuffer != NULL);
-        
-        // ---- MMIO: map pixel_proc registers, optionally remap DDR to physical ----
-        std::cout << model->fpgaUseMmio << std::endl;
-        if (model->fpgaUseMmio) {
-          std::cout << "checking for UIO device..." << std::endl;
-#if defined(__linux__)
-          if (!map_pixel_proc_regs(model)) {
-            model->fpgaUseMmio = false;  // fall back to sim
-          } else {
-            uint32_t ddrPhys = env_u32_hex_or_dec("VIBE_FPGA_DDR_BASE", 0u);
-            if (ddrPhys != 0u) {
-              map_ddr_buffer(model, ddrPhys);
-            }
-          }
-          std::cout << "check done" << std::endl;
-#else
-          model->fpgaUseMmio = false;
-#endif
+
+        // ---- Map pixel_proc registers ----
+        if (!map_pixel_proc_regs(model)) {
+          fprintf(stderr, "[ViBe] FATAL: failed to map pixel_proc registers\n");
+          assert(0 && "map_pixel_proc_regs failed");
+        }
+
+        // Optionally remap DDR buffer to physical address.
+        uint32_t ddrPhys = env_u32_hex_or_dec("VIBE_FPGA_DDR_BASE", 0u);
+        if (ddrPhys != 0u) {
+          map_ddr_buffer(model, ddrPhys);
         }
 
         // ---- Initialize DDR buffer ----
-        // Helper: write RGBX entry (OpenCV BGR → RGBX)
-        // change data of one pixel to 32bit, and the order is R G B X, X is 0. Easier for AXI to read.
         auto writeRgbxEntry = [](uint8_t *dst, const uint8_t *src) {
           dst[0] = src[2];  // R
           dst[1] = src[1];  // G
@@ -501,7 +399,7 @@ namespace bgslibrary
         auto writeRgbxValues = [](uint8_t *dst, uint8_t r, uint8_t g, uint8_t b) {
           dst[0] = r; dst[1] = g; dst[2] = b; dst[3] = 0u;
         };
-        
+
         auto plusNoise = [](uint8_t value) -> uint8_t {
           int n = value + rand() % 20 - 10;
           if (n < 0) n = 0;
@@ -511,17 +409,16 @@ namespace bgslibrary
 
         memset(model->fpgaDdrBuffer, 0, model->fpgaDdrBufferBytes);
 
-        const uint32_t seededSamples = seeded_sample_count(model->numberOfSamples);
         for (uint32_t pi = 0; pi < pixelCount; ++pi) {
           const uint8_t *pixel = image_data + 3u * pi;
 
           // Entry 0: current frame
           writeRgbxEntry(model->fpgaDdrBuffer + DdrPixelLayout::currentOffset(pi), pixel);
 
-          // Entries 1..N: history
+          // Entries 1..N: history (first 2 seeded from frame, rest with noise)
           for (uint32_t s = 0; s < model->numberOfSamples; ++s) {
             uint8_t *hist = model->fpgaDdrBuffer + DdrPixelLayout::historyOffset(pi, s);
-            if (s < seededSamples)
+            if (s < NUMBER_OF_HISTORY_IMAGES)
               writeRgbxEntry(hist, pixel);
             else
               writeRgbxValues(hist, plusNoise(pixel[0]), plusNoise(pixel[1]), plusNoise(pixel[2]));
@@ -541,21 +438,11 @@ namespace bgslibrary
           model->position[i] = rand() % model->numberOfSamples;
         }
 
-        std::cout << "AllocInit " << width << "x" << height
-                  << " pixels=" << pixelCount
-                  << " ddrBytes=" << model->fpgaDdrBufferBytes << "\n"
-                  << "Allocated DDR buffer start address: " << model->fpgaDdrBuffer << "\n"
-                  << " mmio=" << (model->fpgaUseMmio ? "yes" : "no(sim)")
-                  << " samples=" << model->numberOfSamples
-                  << " threshold=" << model->matchingThreshold
-                  << " matchNum=" << model->matchingNumber
-                  << std::endl;
-
         return(0);
       }
 
       // =========================================================================
-      // Segmentation C3R — unified batched pipeline (MMIO + sim)
+      // Segmentation C3R — MMIO batched pipeline
       // =========================================================================
       int32_t libvibeModel_Sequential_Segmentation_8u_C3R(
         vibeModel_Sequential_t *model,
@@ -565,12 +452,14 @@ namespace bgslibrary
         assert((image_data != NULL) && (model != NULL) && (segmentation_map != NULL));
         assert((model->width > 0) && (model->height > 0));
         assert(model->fpgaDdrBuffer != NULL);
+        assert(model->fpgaPixelProcRegs != NULL);
         assert((model->jump != NULL) && (model->neighbor != NULL) && (model->position != NULL));
 
         const uint32_t width  = model->width;
         const uint32_t height = model->height;
         const uint32_t pixelCount = width * height;
         const uint32_t numberOfSamples = model->numberOfSamples;
+        volatile uint32_t *regs = model->fpgaPixelProcRegs;
 
         memset(segmentation_map, COLOR_BACKGROUND, pixelCount);
 
@@ -585,24 +474,13 @@ namespace bgslibrary
         }
 
         // ---- Stage 2: Write DDR address + start FPGA ----
-        // Order of reg: SRC_ADDR_LO, SRC_ADDR_HI, PIXEL_COUNT, START.
-        if (model->fpgaUseMmio) {
-          uint64_t ddrPhys = static_cast<uint64_t>(model->fpgaDdrPhysBase);
-          regWrite(model, REG_SRC_ADDR_LO, static_cast<uint32_t>(ddrPhys & 0xFFFFFFFFu));
-          regWrite(model, REG_SRC_ADDR_HI, static_cast<uint32_t>(ddrPhys >> 32));
-        }
-        regWrite(model, REG_PIXEL_COUNT, pixelCount);
-        regWrite(model, REG_CONTROL, kControlStart);
+        uint64_t ddrPhys = static_cast<uint64_t>(model->fpgaDdrPhysBase);
+        regWrite(regs, REG_SRC_ADDR_LO, static_cast<uint32_t>(ddrPhys & 0xFFFFFFFFu));
+        regWrite(regs, REG_SRC_ADDR_HI, static_cast<uint32_t>(ddrPhys >> 32));
+        regWrite(regs, REG_PIXEL_COUNT, pixelCount);
+        regWrite(regs, REG_CONTROL, kControlStart);
 
-        if (!model->fpgaUseMmio) {
-          simPixelProcInit(&model->fpgaSimRegs,
-                           model->fpgaDdrBuffer, pixelCount, width, height,
-                           segmentation_map,
-                           model->matchingThreshold, model->matchingNumber);
-          simPixelProcTick(&model->fpgaSimRegs);  // first batch
-        }
-
-        // ---- Stage 3: Batch loop (matches API.md §四 step 4) ----
+        // ---- Stage 3: Batch loop ----
         auto updateHistoryForPixel = [&](uint32_t pixelIndex) {
           uint32_t slot   = model->position[pixelIndex % (2 * width + 1)];
           uint32_t sampleIndex = slot % numberOfSamples;
@@ -617,34 +495,26 @@ namespace bgslibrary
 
         uint32_t done = 0u;
         uint32_t left = pixelCount;
+        const uint32_t maxPolls = env_u32_hex_or_dec("VIBE_FPGA_POLL_LIMIT", 200000u);
 
         while (!done) {
-          // Wait READY (API.md: while ((STATUS & 0x02) == 0))
+          // Wait READY
           {
             uint32_t poll = 0u;
-            const uint32_t maxPolls = model->fpgaUseMmio
-              ? env_u32_hex_or_dec("VIBE_FPGA_POLL_LIMIT", 200000u)
-              : 1u;
             uint32_t status;
             do {
-              status = regRead(model, REG_STATUS);
-              if (status & fpga::kStatusError) { done = 1u; break; }
-              if (model->fpgaUseMmio && (++poll >= maxPolls)) { done = 1u; break; }
-#if defined(__linux__)
-              if (model->fpgaUseMmio && (poll % 128u) == 0u) usleep(10);
-#endif
+              status = regRead(regs, REG_STATUS);
+              if (++poll >= maxPolls) { done = 1u; break; }
+              if ((poll % 128u) == 0u) usleep(10);
             } while (!(status & kStatusReady));
             if (done) break;
           }
 
-          // Read RESULT + ACK (API.md: single write of 0x80).
-          uint32_t r = regRead(model, REG_RESULT);
-          regWrite(model, REG_CONTROL, kControlAck);
+          // Read RESULT + ACK
+          uint32_t r = regRead(regs, REG_RESULT);
+          regWrite(regs, REG_CONTROL, kControlAck);
 
-          if (!model->fpgaUseMmio)
-            simPixelProcClearReady(&model->fpgaSimRegs);
-
-          // Process batch (API.md: for i < 32 && left > 0).
+          // Process batch
           for (uint32_t i = 0u; i < kPixelsPerBatch && left > 0u; ++i, --left) {
             uint32_t pixelIndex = pixelCount - left;
             if (r & (1u << i)) {
@@ -655,39 +525,21 @@ namespace bgslibrary
             }
           }
 
-          // Advance sim.
-          if (!model->fpgaUseMmio)
-            simPixelProcTick(&model->fpgaSimRegs);
-
-          // Check DONE (API.md: after inner loop).
-          if (regRead(model, REG_STATUS) & kStatusDone)
+          // Check DONE
+          if (regRead(regs, REG_STATUS) & kStatusDone)
             done = 1u;
         }
 
-        // Clear START (API.md §四 step 5).
-        regWrite(model, REG_CONTROL, 0u);
+        // Clear START
+        regWrite(regs, REG_CONTROL, 0u);
 
         ++model->fpgaFrameSequence;
-
-        // Debug output.
-        {
-          uint32_t fgCount = 0u;
-          for (uint32_t i = 0; i < pixelCount; ++i)
-            if (segmentation_map[i] == COLOR_FOREGROUND) ++fgCount;
-
-          std::cerr << "[ViBe C3R Seg] frame=" << (model->fpgaFrameSequence - 1)
-                    << " fg=" << fgCount
-                    << " bg=" << (pixelCount - fgCount)
-                    << " mmio=" << (model->fpgaUseMmio ? "yes" : "sim")
-                    << std::endl;
-        }
 
         return(0);
       }
 
       // =========================================================================
-      // Update C3R — no-op. History updates happen inline during the
-      // Segmentation batch loop (both MMIO and SIM paths).
+      // Update C3R — no-op. History updates happen inline during Segmentation.
       // =========================================================================
       int32_t libvibeModel_Sequential_Update_8u_C3R(
         vibeModel_Sequential_t *model,

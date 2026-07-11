@@ -42,9 +42,6 @@ void ViBe::process(const cv::Mat &img_input, cv::Mat &img_output, cv::Mat &img_b
     return;
 
   if (firstTime) {
-    // Hardware-fixed parameters (API.md §八):
-    //   numberOfSamples=23, matchingThreshold=45, matchingNumber=3
-    // Set in AllocInit for MMIO; SIM uses defaults from New() (20/20/2/16).
     vibe::libvibeModel_Sequential_AllocInit_8u_C3R(model, img_input.data, img_input.cols, img_input.rows);
   }
 
