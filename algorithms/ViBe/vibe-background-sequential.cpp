@@ -498,7 +498,7 @@ namespace bgslibrary
         const uint32_t maxPolls = env_u32_hex_or_dec("VIBE_FPGA_POLL_LIMIT", 200000u);
 
         while (!done) {
-          // Wait READY
+          // Wait until a batch result is available or the engine finishes.
           {
             uint32_t poll = 0u;
             uint32_t status;
@@ -506,14 +506,15 @@ namespace bgslibrary
               status = regRead(regs, REG_STATUS);
               if (++poll >= maxPolls) { done = 1u; break; }
               if ((poll % 128u) == 0u) usleep(10);
-            } while (!(status & kStatusReady));
+            } while (!(status & (kStatusIrq | kStatusDone)));
             if (done) break;
           }
 
           // Read RESULT + ACK
           uint32_t r = regRead(regs, REG_RESULT);
           printf("FPGA result: 0x%08X, left=%u\n", r, left);
-          regWrite(regs, REG_CONTROL, kControlAck);
+          if (regRead(regs, REG_STATUS) & kStatusIrq)
+            regWrite(regs, REG_CONTROL, kControlAck);
 
           // Process batch
           for (uint32_t i = 0u; i < kPixelsPerBatch && left > 0u; ++i, --left) {

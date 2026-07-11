@@ -30,7 +30,7 @@ namespace bgslibrary
       enum PixelProcReg : uint32_t
       {
         REG_CONTROL     = 0x80,  // RW: [0]=START, [7]=ACK
-        REG_STATUS      = 0x84,  // RO: [0]=BUSY, [1]=READY, [2]=DONE
+        REG_STATUS      = 0x84,  // RO: [0]=BUSY, [1]=IRQ/data ready, [2]=DONE
         REG_SRC_ADDR_LO = 0x88,  // RW: DDR physical address low 32 bits
         REG_SRC_ADDR_HI = 0x8C,  // RW: DDR physical address high 32 bits
         REG_PIXEL_COUNT = 0x90,  // RW: total pixel count
@@ -47,9 +47,9 @@ namespace bgslibrary
       // =======================================================================
       // STATUS register bits
       // =======================================================================
-      constexpr uint32_t kStatusBusy  = 0x01;
-      constexpr uint32_t kStatusReady = 0x02;
-      constexpr uint32_t kStatusDone  = 0x04;
+      constexpr uint32_t kStatusBusy = 0x01;
+      constexpr uint32_t kStatusIrq  = 0x02;
+      constexpr uint32_t kStatusDone = 0x04;
 
       // =======================================================================
       // DDR buffer layout (pixel-interleaved, 96 bytes/pixel, 24 entries)
