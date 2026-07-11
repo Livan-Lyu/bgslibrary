@@ -32,8 +32,9 @@ namespace bgslibrary
 
       static inline bool fpga_transport_use_mmio()
       {
-        const char *mode = getenv("VIBE_FPGA_TRANSPORT");
-        return mode != NULL && strcmp(mode, "mmio") == 0;
+        // const char *mode = getenv("VIBE_FPGA_TRANSPORT");
+        // return mode != NULL && strcmp(mode, "mmio") == 0;
+        return true;  // default to MMIO for now
       }
 
       static inline uint32_t env_u32_hex_or_dec(const char *name, const uint32_t defaultValue)
@@ -469,6 +470,7 @@ namespace bgslibrary
         assert(model->fpgaDdrBuffer != NULL);
         
         // ---- MMIO: map pixel_proc registers, optionally remap DDR to physical ----
+        std::cout << model->fpgaUseMmio << std::endl;
         if (model->fpgaUseMmio) {
           std::cout << "checking for UIO device..." << std::endl;
 #if defined(__linux__)
@@ -541,8 +543,8 @@ namespace bgslibrary
 
         std::cout << "AllocInit " << width << "x" << height
                   << " pixels=" << pixelCount
-                  << " ddrBytes=" << model->fpgaDdrBufferBytes
-                  << "Allocated DDR buffer start address: " << model->fpgaDdrBuffer
+                  << " ddrBytes=" << model->fpgaDdrBufferBytes << "\n"
+                  << "Allocated DDR buffer start address: " << model->fpgaDdrBuffer << "\n"
                   << " mmio=" << (model->fpgaUseMmio ? "yes" : "no(sim)")
                   << " samples=" << model->numberOfSamples
                   << " threshold=" << model->matchingThreshold
