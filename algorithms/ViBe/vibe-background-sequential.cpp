@@ -512,6 +512,7 @@ namespace bgslibrary
 
           // Read RESULT + ACK
           uint32_t r = regRead(regs, REG_RESULT);
+          printf("FPGA result: 0x%08X, left=%u\n", r, left);
           regWrite(regs, REG_CONTROL, kControlAck);
 
           // Process batch
