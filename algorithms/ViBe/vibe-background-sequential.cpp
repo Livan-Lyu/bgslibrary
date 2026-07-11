@@ -493,6 +493,7 @@ namespace bgslibrary
 
         // ---- Stage 2: Write DDR address + start FPGA ----
         uint64_t ddrPhys = static_cast<uint64_t>(model->fpgaDdrPhysBase);
+        regWrite(regs, REG_CONTROL, 0u);
         regWrite(regs, REG_SRC_ADDR_LO, static_cast<uint32_t>(ddrPhys & 0xFFFFFFFFu));
         regWrite(regs, REG_SRC_ADDR_HI, static_cast<uint32_t>(ddrPhys >> 32));
         regWrite(regs, REG_PIXEL_COUNT, pixelCount);
