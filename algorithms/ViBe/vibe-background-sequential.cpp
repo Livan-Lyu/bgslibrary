@@ -401,7 +401,7 @@ namespace bgslibrary
         dump_pixel_proc_regs(model->fpgaPixelProcRegs, "after-map");
 
         // Optionally remap DDR buffer to physical address.
-        uint32_t ddrPhys = env_u32_hex_or_dec("VIBE_FPGA_DDR_BASE", 0u);
+        uint32_t ddrPhys = env_u32_hex_or_dec("VIBE_FPGA_DDR_BASE", 0xC0000000u);
         if (ddrPhys != 0u) {
           map_ddr_buffer(model, ddrPhys);
         }
