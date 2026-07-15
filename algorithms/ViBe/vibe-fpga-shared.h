@@ -16,40 +16,24 @@ namespace bgslibrary
       constexpr size_t   kDdrBytesPerPixel      = 96u;   // 24 entries × 4 bytes (RGBX)
       constexpr uint32_t kHardwareSadThreshold  = 45u;   // SAD ≤ 45 is a match
       constexpr uint32_t kHardwareMatchingNumber = 2u;   // match_count ≥ 2 → background
-      constexpr uint32_t kPixelsPerBatch        = 32u;   // 32 results per RESULT read
+      // =======================================================================
+      // FPGA hardware interface
+      // =======================================================================
+      constexpr uint32_t kPixelProcPhysBase       = 0x60000000u;
+      constexpr uint32_t kSharedMemoryPhysBase    = 0xC4000000u;
+      constexpr uint32_t kSharedMemoryPhysEnd     = 0xC9FFFFFFu;
+      constexpr size_t   kOutputBytesPerPixel     = 1u;
 
       // =======================================================================
-      // CAPE base address
-      // =======================================================================
-      constexpr uint32_t kPixelProcPhysBase  = 0x41300000u;
-      constexpr uint32_t kPixelProcRegOffset = 0x80u;
-
-      // =======================================================================
-      // Register offsets (absolute, relative to CAPE base)
+      // Register offsets (relative to FPGA base)
       // =======================================================================
       enum PixelProcReg : uint32_t
       {
-        REG_CONTROL     = 0x80,  // RW: [0]=START, [7]=ACK
-        REG_STATUS      = 0x84,  // RO: [0]=BUSY, [1]=IRQ/data ready, [2]=DONE
-        REG_SRC_ADDR_LO = 0x88,  // RW: DDR physical address low 32 bits
-        REG_SRC_ADDR_HI = 0x8C,  // RW: DDR physical address high 32 bits
-        REG_PIXEL_COUNT = 0x90,  // RW: total pixel count
-        REG_RESULT      = 0x94,  // RO: 32 packed foreground bits
-        REG_DEBUG       = 0x98,  // RO: 0xDEADBEEF
+        REG_START_IDLE  = 0x08,  // RW: write 1 to start, poll until read value is 0
+        REG_INPUT_PTR   = 0x10,  // RW: input buffer physical address
+        REG_OUTPUT_PTR  = 0x18,  // RW: output buffer physical address
+        REG_PIXEL_COUNT = 0x20,  // RW: total pixel count
       };
-
-      // =======================================================================
-      // CONTROL register bits
-      // =======================================================================
-      constexpr uint32_t kControlStart = 0x01;
-      constexpr uint32_t kControlAck   = 0x80;
-
-      // =======================================================================
-      // STATUS register bits
-      // =======================================================================
-      constexpr uint32_t kStatusBusy = 0x01;
-      constexpr uint32_t kStatusIrq  = 0x02;
-      constexpr uint32_t kStatusDone = 0x04;
 
       // =======================================================================
       // DDR buffer layout (pixel-interleaved, 96 bytes/pixel, 24 entries)

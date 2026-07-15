@@ -81,21 +81,28 @@ namespace bgslibrary
         return regs[offset >> 2];
       }
 
+      static bool shared_memory_contains(uint32_t physBase, size_t bytes)
+      {
+        if (bytes == 0u)
+          return true;
+        const uint64_t begin = static_cast<uint64_t>(physBase);
+        const uint64_t end = begin + static_cast<uint64_t>(bytes) - 1u;
+        return begin >= kSharedMemoryPhysBase && end <= kSharedMemoryPhysEnd && end >= begin;
+      }
+
       static void dump_pixel_proc_regs(volatile uint32_t *regs, const char *tag)
       {
         if (regs == NULL)
           return;
 
-        const uint32_t ctrl   = regRead(regs, REG_CONTROL);
-        const uint32_t status = regRead(regs, REG_STATUS);
-        const uint32_t srcLo  = regRead(regs, REG_SRC_ADDR_LO);
-        const uint32_t srcHi  = regRead(regs, REG_SRC_ADDR_HI);
-        const uint32_t count  = regRead(regs, REG_PIXEL_COUNT);
-        const uint32_t debug  = regRead(regs, REG_DEBUG);
+        const uint32_t startIdle = regRead(regs, REG_START_IDLE);
+        const uint32_t inputPtr  = regRead(regs, REG_INPUT_PTR);
+        const uint32_t outputPtr = regRead(regs, REG_OUTPUT_PTR);
+        const uint32_t count     = regRead(regs, REG_PIXEL_COUNT);
 
         fprintf(stderr,
-          "[pixel_proc:%s] CTRL=0x%08X STAT=0x%08X SRC_LO=0x%08X SRC_HI=0x%08X CNT=%u DBG=0x%08X\n",
-          tag, ctrl, status, srcLo, srcHi, count, debug);
+          "[pixel_proc:%s] START_IDLE=0x%08X INPUT=0x%08X OUTPUT=0x%08X CNT=%u\n",
+          tag, startIdle, inputPtr, outputPtr, count);
       }
 
       // =========================================================================
@@ -143,7 +150,7 @@ namespace bgslibrary
           const uint32_t capeBase = kPixelProcPhysBase;
           const off_t mapBase = static_cast<off_t>(capeBase & ~(static_cast<uint32_t>(pageSize) - 1u));
           const size_t mapDelta = static_cast<size_t>(capeBase - static_cast<uint32_t>(mapBase));
-          mapBytes = fpga::AlignUp(0x100u + mapDelta, static_cast<size_t>(pageSize));
+          mapBytes = fpga::AlignUp(0x24u + mapDelta, static_cast<size_t>(pageSize));
 
           fd = open("/dev/mem", O_RDWR | O_SYNC);
           if (fd < 0)
@@ -177,7 +184,14 @@ namespace bgslibrary
 
         const off_t mapBase = static_cast<off_t>(physBase & ~(static_cast<uint32_t>(pageSize) - 1u));
         const size_t mapDelta = static_cast<size_t>(physBase - static_cast<uint32_t>(mapBase));
-        const size_t mapBytes = fpga::AlignUp(model->fpgaDdrBufferBytes + mapDelta, static_cast<size_t>(pageSize));
+        const uint64_t maxSharedBytes = static_cast<uint64_t>(kSharedMemoryPhysEnd) -
+          static_cast<uint64_t>(physBase) + 1u;
+        if (physBase < kSharedMemoryPhysBase || physBase > kSharedMemoryPhysEnd ||
+            static_cast<uint64_t>(model->fpgaDdrBufferBytes) > maxSharedBytes)
+          return false;
+
+        const size_t mapBytes = fpga::AlignUp(static_cast<size_t>(maxSharedBytes) + mapDelta,
+          static_cast<size_t>(pageSize));
 
         int fd = open("/dev/mem", O_RDWR | O_SYNC);
         if (fd < 0)
@@ -400,10 +414,11 @@ namespace bgslibrary
         }
         dump_pixel_proc_regs(model->fpgaPixelProcRegs, "after-map");
 
-        // Optionally remap DDR buffer to physical address.
-        uint32_t ddrPhys = env_u32_hex_or_dec("VIBE_FPGA_DDR_BASE", 0xC4000000u);
-        if (ddrPhys != 0u) {
-          map_ddr_buffer(model, ddrPhys);
+        // Remap DDR buffer to the default shared-memory physical address.
+        if (!map_ddr_buffer(model, kSharedMemoryPhysBase)) {
+          fprintf(stderr, "[ViBe] FATAL: failed to map shared memory at 0x%08X\n",
+            kSharedMemoryPhysBase);
+          assert(0 && "map_ddr_buffer failed");
         }
 
         // ---- Initialize DDR buffer ----
@@ -460,7 +475,7 @@ namespace bgslibrary
       }
 
       // =========================================================================
-      // Segmentation C3R — MMIO batched pipeline
+      // Segmentation C3R — MMIO shared-memory pipeline
       // =========================================================================
       int32_t libvibeModel_Sequential_Segmentation_8u_C3R(
         vibeModel_Sequential_t *model,
@@ -491,16 +506,48 @@ namespace bgslibrary
           cur[3] = 0u;      // X
         }
 
-        // ---- Stage 2: Write DDR address + start FPGA ----
-        uint64_t ddrPhys = static_cast<uint64_t>(model->fpgaDdrPhysBase);
-        regWrite(regs, REG_CONTROL, 0u);
-        regWrite(regs, REG_SRC_ADDR_LO, static_cast<uint32_t>(ddrPhys & 0xFFFFFFFFu));
-        regWrite(regs, REG_SRC_ADDR_HI, static_cast<uint32_t>(ddrPhys >> 32));
+        const uint32_t inputAddr = model->fpgaDdrPhysBase;
+        if (inputAddr != kSharedMemoryPhysBase ||
+            model->fpgaDdrBufferBytes > static_cast<size_t>(UINT32_MAX - inputAddr)) {
+          fprintf(stderr, "[ViBe] FATAL: invalid shared-memory input address/size\n");
+          return(-1);
+        }
+
+        const uint32_t outputAddr = inputAddr + static_cast<uint32_t>(model->fpgaDdrBufferBytes);
+        const size_t outputBytes = static_cast<size_t>(pixelCount) * kOutputBytesPerPixel;
+        if (!shared_memory_contains(inputAddr, model->fpgaDdrBufferBytes) ||
+            !shared_memory_contains(outputAddr, outputBytes)) {
+          fprintf(stderr,
+            "[ViBe] FATAL: input/output buffers exceed shared memory range 0x%08X-0x%08X\n",
+            kSharedMemoryPhysBase, kSharedMemoryPhysEnd);
+          return(-1);
+        }
+
+        uint8_t *fpgaOutputBuffer = model->fpgaDdrBuffer + model->fpgaDdrBufferBytes;
+        memset(fpgaOutputBuffer, COLOR_BACKGROUND, outputBytes);
+
+        // ---- Stage 2: Write input/output/count, then start FPGA ----
+        regWrite(regs, REG_INPUT_PTR, inputAddr);
+        regWrite(regs, REG_OUTPUT_PTR, outputAddr);
         regWrite(regs, REG_PIXEL_COUNT, pixelCount);
-        regWrite(regs, REG_CONTROL, kControlStart);
+        regWrite(regs, REG_START_IDLE, 1u);
         dump_pixel_proc_regs(regs, "after-start");
 
-        // ---- Stage 3: Batch loop ----
+        // ---- Stage 3: Poll start/idle until hardware returns 0 ----
+        const uint32_t maxPolls = env_u32_hex_or_dec("VIBE_FPGA_POLL_LIMIT", 200000u);
+        uint32_t poll = 0u;
+        while (regRead(regs, REG_START_IDLE) != 0u) {
+          if ((poll == 0u) || ((poll % 4096u) == 0u))
+            dump_pixel_proc_regs(regs, "poll");
+          if (++poll >= maxPolls) {
+            dump_pixel_proc_regs(regs, "timeout");
+            assert(0 && "FPGA polling timed out");
+            return(-1);
+          }
+          if ((poll % 128u) == 0u) usleep(10);
+        }
+
+        // ---- Stage 4: Read output buffer and update software history ----
         auto updateHistoryForPixel = [&](uint32_t pixelIndex) {
           uint32_t slot   = model->position[pixelIndex % (2 * width + 1)];
           uint32_t sampleIndex = slot % numberOfSamples;
@@ -513,53 +560,11 @@ namespace bgslibrary
           hist[3] = 0u;      // X
         };
 
-        uint32_t done = 0u;
-        uint32_t left = pixelCount;
-        const uint32_t maxPolls = env_u32_hex_or_dec("VIBE_FPGA_POLL_LIMIT", 200000u);
-
-        while (!done) {
-          // Wait until a batch result is available or the engine finishes.
-          {
-            uint32_t poll = 0u;
-            uint32_t status;
-            do {
-              status = regRead(regs, REG_STATUS);
-              if ((poll == 0u) || ((poll % 4096u) == 0u))
-                dump_pixel_proc_regs(regs, "poll");
-              if (++poll >= maxPolls) {
-                dump_pixel_proc_regs(regs, "timeout");
-                done = 1u;
-                break;
-              }
-              if ((poll % 128u) == 0u) usleep(10);
-            } while (!(status & (kStatusIrq | kStatusDone)));
-            if (done) break;
-          }
-
-          // Read RESULT + ACK
-          uint32_t r = regRead(regs, REG_RESULT);
-          printf("FPGA result: 0x%08X, left=%u\n", r, left);
-          if (regRead(regs, REG_STATUS) & kStatusIrq)
-            regWrite(regs, REG_CONTROL, kControlAck);
-
-          // Process batch
-          for (uint32_t i = 0u; i < kPixelsPerBatch && left > 0u; ++i, --left) {
-            uint32_t pixelIndex = pixelCount - left;
-            if (r & (1u << i)) {
-              segmentation_map[pixelIndex] = COLOR_FOREGROUND;
-            } else {
-              segmentation_map[pixelIndex] = COLOR_BACKGROUND;
-              updateHistoryForPixel(pixelIndex);
-            }
-          }
-
-          // Check DONE
-          if (regRead(regs, REG_STATUS) & kStatusDone)
-            done = 1u;
+        for (uint32_t pi = 0u; pi < pixelCount; ++pi) {
+          segmentation_map[pi] = fpgaOutputBuffer[pi];
+          if (segmentation_map[pi] == COLOR_BACKGROUND)
+            updateHistoryForPixel(pi);
         }
-
-        // Clear START
-        regWrite(regs, REG_CONTROL, 0u);
 
         ++model->fpgaFrameSequence;
 
