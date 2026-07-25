@@ -1,6 +1,15 @@
 #pragma once
 
+#include <array>
+#include <condition_variable>
+#include <cstdint>
+#include <deque>
+#include <map>
+#include <mutex>
 #include <opencv2/opencv.hpp>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include "ViBe/vibe-fpga-shared.h"
 #include "ViBe/vibe-background-sequential.h"
@@ -29,14 +38,47 @@ namespace bgslibrary
       cv::Mat m_outputBg;
       cv::Size m_lastSize;
 
+      enum class SlotState
+      {
+        Free,
+        Preparing,
+        Ready,
+        Running,
+        Complete
+      };
+
+      struct WorkItem
+      {
+        uint64_t frameNumber;
+        uint32_t slotIndex;
+      };
+
+      std::thread worker;
+      std::mutex pipelineMutex;
+      std::condition_variable workAvailable;
+      std::condition_variable resultAvailable;
+      std::deque<WorkItem> workQueue;
+      std::map<uint64_t, std::vector<uint8_t>> completedFrames;
+      std::array<SlotState, vibe::kFpgaBufferCount> slotStates;
+      uint64_t nextFrameNumber;
+      bool initialized;
+      bool stopRequested;
+      bool workerFailed;
+      std::string workerError;
+
     public:
       ViBe();
       ~ViBe();
 
       void process(const cv::Mat &img_input, cv::Mat &img_output, cv::Mat &img_bgmodel);
+      void finish();
 
     private:
       void init(const cv::Mat &img_input, cv::Mat &img_outfg, cv::Mat &img_outbg);
+      void workerLoop();
+      void stopWorker();
+      void throwWorkerErrorLocked() const;
+      void collectResult(uint64_t frameNumber, cv::Mat &img_output, const cv::Size &size);
     };
   }
 }

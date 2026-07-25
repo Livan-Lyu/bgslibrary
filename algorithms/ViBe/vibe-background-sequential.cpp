@@ -46,12 +46,13 @@ namespace bgslibrary
         /* Storage for the history. */
         uint32_t lastHistorySampleSwapped;
 
-        /* DDR buffer (pixel-interleaved RGBX, 96 bytes/pixel). */
-        uint8_t  *fpgaDdrBuffer;
-        size_t    fpgaDdrBufferBytes;
-        uint32_t  fpgaDdrPhysBase;        // 0 = heap, else physical address via /dev/mem
-        void     *fpgaDdrMapping;
-        size_t    fpgaDdrMappingBytes;
+        /*
+         * Two independent slots. A slot keeps the model produced by the
+         * frame two positions earlier, so slot(frame % 2) is the N-2 model.
+         */
+        DdrFrameBuffer fpgaDdrBuffers[kFpgaBufferCount];
+        size_t         fpgaDdrSlotBytes;
+        int            fpgaDdrMemFd;
 
         /* pixel_proc registers (mmap'd via UIO or /dev/mem). */
         volatile uint32_t *fpgaPixelProcRegs;
@@ -87,7 +88,10 @@ namespace bgslibrary
           return true;
         const uint64_t begin = static_cast<uint64_t>(physBase);
         const uint64_t end = begin + static_cast<uint64_t>(bytes) - 1u;
-        return begin >= kSharedMemoryPhysBase && end <= kSharedMemoryPhysEnd && end >= begin;
+        const uint32_t sharedMemoryEnd = env_u32_hex_or_dec(
+          "VIBE_FPGA_DDR_END", kSharedMemoryPhysEnd);
+        return begin >= kSharedMemoryPhysBase &&
+          end <= static_cast<uint64_t>(sharedMemoryEnd) && end >= begin;
       }
 
       static void dump_pixel_proc_regs(volatile uint32_t *regs, const char *tag)
@@ -173,45 +177,50 @@ namespace bgslibrary
         return true;
       }
 
-      static bool map_ddr_buffer(vibeModel_Sequential_t *model, uint32_t physBase)
+      static bool map_ddr_buffer(
+        vibeModel_Sequential_t *model,
+        const uint32_t slotIndex,
+        const uint32_t physBase
+      )
       {
-        if (model == NULL || physBase == 0u)
+        if (model == NULL || slotIndex >= kFpgaBufferCount || physBase == 0u)
           return false;
 
         const long pageSize = sysconf(_SC_PAGESIZE);
         if (pageSize <= 0)
           return false;
 
+        DdrFrameBuffer &buffer = model->fpgaDdrBuffers[slotIndex];
         const off_t mapBase = static_cast<off_t>(physBase & ~(static_cast<uint32_t>(pageSize) - 1u));
         const size_t mapDelta = static_cast<size_t>(physBase - static_cast<uint32_t>(mapBase));
-        const uint64_t maxSharedBytes = static_cast<uint64_t>(kSharedMemoryPhysEnd) -
-          static_cast<uint64_t>(physBase) + 1u;
-        if (physBase < kSharedMemoryPhysBase || physBase > kSharedMemoryPhysEnd ||
-            static_cast<uint64_t>(model->fpgaDdrBufferBytes) > maxSharedBytes)
+        if (!shared_memory_contains(physBase, model->fpgaDdrSlotBytes))
           return false;
 
-        const size_t mapBytes = fpga::AlignUp(static_cast<size_t>(maxSharedBytes) + mapDelta,
+        const size_t mapBytes = fpga::AlignUp(model->fpgaDdrSlotBytes + mapDelta,
           static_cast<size_t>(pageSize));
 
-        int fd = open("/dev/mem", O_RDWR | O_SYNC);
-        if (fd < 0)
-          return false;
+        if (model->fpgaDdrMemFd < 0) {
+          model->fpgaDdrMemFd = open("/dev/mem", O_RDWR | O_SYNC);
+          if (model->fpgaDdrMemFd < 0)
+            return false;
+        }
 
-        void *mapping = mmap(NULL, mapBytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, mapBase);
+        void *mapping = mmap(
+          NULL, mapBytes, PROT_READ | PROT_WRITE, MAP_SHARED, model->fpgaDdrMemFd, mapBase);
         if (mapping == MAP_FAILED) {
-          close(fd);
           return false;
         }
 
-        // Copy heap buffer content to physically-mapped region, then free heap.
-        uint8_t *physBuffer = reinterpret_cast<uint8_t*>(mapping) + mapDelta;
-        memcpy(physBuffer, model->fpgaDdrBuffer, model->fpgaDdrBufferBytes);
-        free(model->fpgaDdrBuffer);
-
-        model->fpgaDdrBuffer = physBuffer;
-        model->fpgaDdrPhysBase = physBase;
-        model->fpgaDdrMapping = mapping;
-        model->fpgaDdrMappingBytes = mapBytes;
+        buffer.physBase = physBase;
+        buffer.outputPhysBase = physBase + static_cast<uint32_t>(buffer.modelBytes);
+        buffer.mapping = reinterpret_cast<uint8_t*>(mapping);
+        buffer.mappingBytes = mapBytes;
+        buffer.model = buffer.mapping + mapDelta;
+        buffer.output = buffer.model + buffer.modelBytes;
+        buffer.command.inputPtr = buffer.physBase;
+        buffer.command.outputPtr = buffer.outputPhysBase;
+        buffer.command.pixelCount = buffer.pixelCount;
+        buffer.command.startIdle = 0u;
         return true;
       }
 
@@ -227,21 +236,24 @@ namespace bgslibrary
           model->fpgaPixelProcRegs = NULL;
         }
 
-        if (model->fpgaDdrMapping != NULL) {
-          munmap(model->fpgaDdrMapping, model->fpgaDdrMappingBytes);
-          model->fpgaDdrMapping = NULL;
-          model->fpgaDdrMappingBytes = 0u;
-          model->fpgaDdrBuffer = NULL;
-        } else {
-          free(model->fpgaDdrBuffer);
-          model->fpgaDdrBuffer = NULL;
+        for (uint32_t i = 0u; i < kFpgaBufferCount; ++i) {
+          DdrFrameBuffer &buffer = model->fpgaDdrBuffers[i];
+          if (buffer.mapping != NULL) {
+            munmap(buffer.mapping, buffer.mappingBytes);
+            buffer.mapping = NULL;
+          }
+          buffer.model = NULL;
+          buffer.output = NULL;
+          buffer.mappingBytes = 0u;
         }
-        model->fpgaDdrBufferBytes = 0u;
-        model->fpgaDdrPhysBase = 0u;
 
         if (model->fpgaDevMemFd >= 0) {
           close(model->fpgaDevMemFd);
           model->fpgaDevMemFd = -1;
+        }
+        if (model->fpgaDdrMemFd >= 0) {
+          close(model->fpgaDdrMemFd);
+          model->fpgaDdrMemFd = -1;
         }
       }
 
@@ -282,11 +294,9 @@ namespace bgslibrary
         model->lastHistorySampleSwapped = 0;
 
         /* pixel_proc / DDR */
-        model->fpgaDdrBuffer            = NULL;
-        model->fpgaDdrBufferBytes       = 0u;
-        model->fpgaDdrPhysBase          = 0u;
-        model->fpgaDdrMapping           = NULL;
-        model->fpgaDdrMappingBytes      = 0u;
+        memset(model->fpgaDdrBuffers, 0, sizeof(model->fpgaDdrBuffers));
+        model->fpgaDdrSlotBytes          = 0u;
+        model->fpgaDdrMemFd              = -1;
         model->fpgaPixelProcRegs        = NULL;
         model->fpgaPixelProcMapping     = NULL;
         model->fpgaPixelProcMappingBytes= 0u;
@@ -379,8 +389,71 @@ namespace bgslibrary
         return(0);
       }
 
+      static void write_current_frame(
+        DdrFrameBuffer &buffer,
+        const uint8_t *image_data,
+        const uint32_t pixelCount
+      )
+      {
+        for (uint32_t pi = 0u; pi < pixelCount; ++pi) {
+          uint8_t *cur = buffer.model + DdrPixelLayout::currentOffset(pi);
+          const uint8_t *src = image_data + 3u * pi;
+          cur[0] = src[2];  // R
+          cur[1] = src[1];  // G
+          cur[2] = src[0];  // B
+          cur[3] = 0u;      // X
+        }
+      }
+
+      static void initialize_slot(
+        DdrFrameBuffer &buffer,
+        const uint8_t *image_data,
+        const uint32_t pixelCount,
+        const uint32_t numberOfSamples
+      )
+      {
+        auto writeRgbxEntry = [](uint8_t *dst, const uint8_t *src) {
+          dst[0] = src[2];  // R
+          dst[1] = src[1];  // G
+          dst[2] = src[0];  // B
+          dst[3] = 0u;      // X
+        };
+
+        auto writeRgbxValues = [](uint8_t *dst, uint8_t r, uint8_t g, uint8_t b) {
+          dst[0] = r; dst[1] = g; dst[2] = b; dst[3] = 0u;
+        };
+
+        auto plusNoise = [](uint8_t value) -> uint8_t {
+          int n = value + rand() % 20 - 10;
+          if (n < 0) n = 0;
+          if (n > 255) n = 255;
+          return static_cast<uint8_t>(n);
+        };
+
+        memset(buffer.model, 0, buffer.modelBytes);
+        memset(buffer.output, COLOR_BACKGROUND, buffer.outputBytes);
+
+        for (uint32_t pi = 0u; pi < pixelCount; ++pi) {
+          const uint8_t *pixel = image_data + 3u * pi;
+          writeRgbxEntry(buffer.model + DdrPixelLayout::currentOffset(pi), pixel);
+
+          for (uint32_t s = 0u; s < numberOfSamples; ++s) {
+            uint8_t *hist = buffer.model + DdrPixelLayout::historyOffset(pi, s);
+            if (s < NUMBER_OF_HISTORY_IMAGES) {
+              writeRgbxEntry(hist, pixel);
+            } else {
+              writeRgbxValues(
+                hist,
+                plusNoise(pixel[0]),
+                plusNoise(pixel[1]),
+                plusNoise(pixel[2]));
+            }
+          }
+        }
+      }
+
       // =========================================================================
-      // AllocInit C3R — MMIO path with DDR buffer
+      // AllocInit C3R — two MMIO slots for asynchronous ping-pong processing
       // =========================================================================
       int32_t libvibeModel_Sequential_AllocInit_8u_C3R(
         vibeModel_Sequential_t *model,
@@ -400,63 +473,86 @@ namespace bgslibrary
         model->matchingThreshold = kHardwareSadThreshold;
         model->matchingNumber    = kHardwareMatchingNumber;
 
-        const uint32_t pixelCount = width * height;
+        const uint64_t pixelCount64 =
+          static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+        if (pixelCount64 == 0u || pixelCount64 > UINT32_MAX)
+          return(-1);
+        const uint32_t pixelCount = static_cast<uint32_t>(pixelCount64);
+        const size_t modelBytes = DdrPixelLayout::totalBytes(pixelCount);
+        const size_t outputBytes =
+          static_cast<size_t>(pixelCount) * kOutputBytesPerPixel;
+        if (modelBytes > SIZE_MAX - outputBytes)
+          return(-1);
+        model->fpgaDdrSlotBytes = modelBytes + outputBytes;
 
-        // ---- Allocate DDR buffer (pixel-interleaved RGBX, 96 bytes/pixel) ----
-        model->fpgaDdrBufferBytes = DdrPixelLayout::totalBytes(pixelCount);
-        model->fpgaDdrBuffer = (uint8_t*)malloc(model->fpgaDdrBufferBytes);
-        assert(model->fpgaDdrBuffer != NULL);
+        const long pageSize = sysconf(_SC_PAGESIZE);
+        if (pageSize <= 0)
+          return(-1);
+        const size_t slotStride = fpga::AlignUp(
+          model->fpgaDdrSlotBytes, static_cast<size_t>(pageSize));
+        const uint32_t bufferABase = env_u32_hex_or_dec(
+          "VIBE_FPGA_DDR_A_BASE", kSharedMemoryPhysBase);
+        const uint64_t defaultBBase64 =
+          static_cast<uint64_t>(bufferABase) + static_cast<uint64_t>(slotStride);
+        if (defaultBBase64 > UINT32_MAX)
+          return(-1);
+        const uint32_t bufferBBase = env_u32_hex_or_dec(
+          "VIBE_FPGA_DDR_B_BASE", static_cast<uint32_t>(defaultBBase64));
+
+        const uint64_t aEnd = static_cast<uint64_t>(bufferABase) +
+          static_cast<uint64_t>(model->fpgaDdrSlotBytes);
+        const uint64_t bEnd = static_cast<uint64_t>(bufferBBase) +
+          static_cast<uint64_t>(model->fpgaDdrSlotBytes);
+        if (bufferABase == 0u || bufferBBase == 0u ||
+            (bufferABase < bufferBBase && aEnd > bufferBBase) ||
+            (bufferBBase < bufferABase && bEnd > bufferABase) ||
+            !shared_memory_contains(bufferABase, model->fpgaDdrSlotBytes) ||
+            !shared_memory_contains(bufferBBase, model->fpgaDdrSlotBytes)) {
+          const uint32_t sharedMemoryEnd = env_u32_hex_or_dec(
+            "VIBE_FPGA_DDR_END", kSharedMemoryPhysEnd);
+          fprintf(stderr,
+            "[ViBe] FATAL: double-buffer DDR layout does not fit: "
+            "slot=%zu bytes, A=0x%08X, B=0x%08X, end=0x%08X\n",
+            model->fpgaDdrSlotBytes, bufferABase, bufferBBase, sharedMemoryEnd);
+          return(-1);
+        }
 
         // ---- Map pixel_proc registers ----
         if (!map_pixel_proc_regs(model)) {
           fprintf(stderr, "[ViBe] FATAL: failed to map pixel_proc registers\n");
-          assert(0 && "map_pixel_proc_regs failed");
+          return(-1);
         }
         dump_pixel_proc_regs(model->fpgaPixelProcRegs, "after-map");
 
-        // Remap DDR buffer to the default shared-memory physical address.
-        if (!map_ddr_buffer(model, kSharedMemoryPhysBase)) {
-          fprintf(stderr, "[ViBe] FATAL: failed to map shared memory at 0x%08X\n",
-            kSharedMemoryPhysBase);
-          assert(0 && "map_ddr_buffer failed");
-        }
+        for (uint32_t i = 0u; i < kFpgaBufferCount; ++i) {
+          DdrFrameBuffer &buffer = model->fpgaDdrBuffers[i];
+          buffer.physBase = (i == 0u) ? bufferABase : bufferBBase;
+          buffer.pixelCount = pixelCount;
+          buffer.modelBytes = modelBytes;
+          buffer.outputBytes = outputBytes;
 
-        // ---- Initialize DDR buffer ----
-        auto writeRgbxEntry = [](uint8_t *dst, const uint8_t *src) {
-          dst[0] = src[2];  // R
-          dst[1] = src[1];  // G
-          dst[2] = src[0];  // B
-          dst[3] = 0u;      // X
-        };
-
-        auto writeRgbxValues = [](uint8_t *dst, uint8_t r, uint8_t g, uint8_t b) {
-          dst[0] = r; dst[1] = g; dst[2] = b; dst[3] = 0u;
-        };
-
-        auto plusNoise = [](uint8_t value) -> uint8_t {
-          int n = value + rand() % 20 - 10;
-          if (n < 0) n = 0;
-          if (n > 255) n = 255;
-          return static_cast<uint8_t>(n);
-        };
-
-        memset(model->fpgaDdrBuffer, 0, model->fpgaDdrBufferBytes);
-
-        for (uint32_t pi = 0; pi < pixelCount; ++pi) {
-          const uint8_t *pixel = image_data + 3u * pi;
-
-          // Entry 0: current frame
-          writeRgbxEntry(model->fpgaDdrBuffer + DdrPixelLayout::currentOffset(pi), pixel);
-
-          // Entries 1..N: history (first 2 seeded from frame, rest with noise)
-          for (uint32_t s = 0; s < model->numberOfSamples; ++s) {
-            uint8_t *hist = model->fpgaDdrBuffer + DdrPixelLayout::historyOffset(pi, s);
-            if (s < NUMBER_OF_HISTORY_IMAGES)
-              writeRgbxEntry(hist, pixel);
-            else
-              writeRgbxValues(hist, plusNoise(pixel[0]), plusNoise(pixel[1]), plusNoise(pixel[2]));
+          if (!map_ddr_buffer(model, i, buffer.physBase)) {
+            fprintf(stderr,
+              "[ViBe] FATAL: failed to map DDR slot %u at 0x%08X\n",
+              i, buffer.physBase);
+            unmap_pixel_proc(model);
+            return(-1);
           }
         }
+
+        // Both slots start from the same initial model version.
+        for (uint32_t i = 0u; i < kFpgaBufferCount; ++i)
+          initialize_slot(
+            model->fpgaDdrBuffers[i],
+            image_data,
+            pixelCount,
+            model->numberOfSamples);
+
+        fprintf(stdout,
+          "[ViBe] double buffer ready: slotBytes=%zu, A=0x%08X, B=0x%08X\n",
+          model->fpgaDdrSlotBytes,
+          model->fpgaDdrBuffers[0].physBase,
+          model->fpgaDdrBuffers[1].physBase);
 
         // ---- Allocate random buffers ----
         int size = (width > height) ? 2 * width + 1 : 2 * height + 1;
@@ -475,65 +571,63 @@ namespace bgslibrary
       }
 
       // =========================================================================
-      // Segmentation C3R — MMIO shared-memory pipeline
+      // Slot preparation — CPU side of the asynchronous pipeline
       // =========================================================================
-      int32_t libvibeModel_Sequential_Segmentation_8u_C3R(
+      int32_t libvibeModel_Sequential_PrepareSlot_8u_C3R(
         vibeModel_Sequential_t *model,
-        const uint8_t *image_data,
+        const uint32_t slotIndex,
+        const uint8_t *image_data
+      ) {
+        if (model == NULL || image_data == NULL || slotIndex >= kFpgaBufferCount)
+          return(-1);
+
+        DdrFrameBuffer &buffer = model->fpgaDdrBuffers[slotIndex];
+        if (buffer.model == NULL || buffer.output == NULL)
+          return(-1);
+
+        write_current_frame(buffer, image_data, buffer.pixelCount);
+        memset(buffer.output, COLOR_BACKGROUND, buffer.outputBytes);
+        return(0);
+      }
+
+      // =========================================================================
+      // Slot segmentation — FPGA side of the asynchronous pipeline
+      // =========================================================================
+      int32_t libvibeModel_Sequential_SegmentSlot_8u_C3R(
+        vibeModel_Sequential_t *model,
+        const uint32_t slotIndex,
         uint8_t *segmentation_map
       ) {
-        assert((image_data != NULL) && (model != NULL) && (segmentation_map != NULL));
-        assert((model->width > 0) && (model->height > 0));
-        assert(model->fpgaDdrBuffer != NULL);
-        assert(model->fpgaPixelProcRegs != NULL);
-        assert((model->jump != NULL) && (model->neighbor != NULL) && (model->position != NULL));
+        if (model == NULL || segmentation_map == NULL ||
+            slotIndex >= kFpgaBufferCount)
+          return(-1);
 
-        const uint32_t width  = model->width;
-        const uint32_t height = model->height;
-        const uint32_t pixelCount = width * height;
+        DdrFrameBuffer &buffer = model->fpgaDdrBuffers[slotIndex];
+        if (buffer.model == NULL || buffer.output == NULL ||
+            model->fpgaPixelProcRegs == NULL)
+          return(-1);
+
+        const uint32_t width = model->width;
+        const uint32_t pixelCount = buffer.pixelCount;
         const uint32_t numberOfSamples = model->numberOfSamples;
         volatile uint32_t *regs = model->fpgaPixelProcRegs;
 
-        memset(segmentation_map, COLOR_BACKGROUND, pixelCount);
-
-        // ---- Stage 1: Refresh entry 0 (current frame) in DDR buffer ----
-        for (uint32_t pi = 0; pi < pixelCount; ++pi) {
-          uint8_t *cur = model->fpgaDdrBuffer + DdrPixelLayout::currentOffset(pi);
-          const uint8_t *src = image_data + 3u * pi;
-          cur[0] = src[2];  // R
-          cur[1] = src[1];  // G
-          cur[2] = src[0];  // B
-          cur[3] = 0u;      // X
-        }
-
-        const uint32_t inputAddr = model->fpgaDdrPhysBase;
-        if (inputAddr != kSharedMemoryPhysBase ||
-            model->fpgaDdrBufferBytes > static_cast<size_t>(UINT32_MAX - inputAddr)) {
-          fprintf(stderr, "[ViBe] FATAL: invalid shared-memory input address/size\n");
-          return(-1);
-        }
-
-        const uint32_t outputAddr = inputAddr + static_cast<uint32_t>(model->fpgaDdrBufferBytes);
-        const size_t outputBytes = static_cast<size_t>(pixelCount) * kOutputBytesPerPixel;
-        if (!shared_memory_contains(inputAddr, model->fpgaDdrBufferBytes) ||
-            !shared_memory_contains(outputAddr, outputBytes)) {
+        if (!shared_memory_contains(buffer.physBase, model->fpgaDdrSlotBytes) ||
+            !shared_memory_contains(buffer.outputPhysBase, buffer.outputBytes)) {
           fprintf(stderr,
-            "[ViBe] FATAL: input/output buffers exceed shared memory range 0x%08X-0x%08X\n",
-            kSharedMemoryPhysBase, kSharedMemoryPhysEnd);
+            "[ViBe] FATAL: slot %u is outside the configured shared memory\n",
+            slotIndex);
           return(-1);
         }
 
-        uint8_t *fpgaOutputBuffer = model->fpgaDdrBuffer + model->fpgaDdrBufferBytes;
-        memset(fpgaOutputBuffer, COLOR_BACKGROUND, outputBytes);
-
-        // ---- Stage 2: Write input/output/count, then start FPGA ----
-        regWrite(regs, REG_INPUT_PTR, inputAddr);
-        regWrite(regs, REG_OUTPUT_PTR, outputAddr);
-        regWrite(regs, REG_PIXEL_COUNT, pixelCount);
+        // ---- Stage 1: Submit this slot to pixel_proc ----
+        regWrite(regs, REG_INPUT_PTR, buffer.command.inputPtr);
+        regWrite(regs, REG_OUTPUT_PTR, buffer.command.outputPtr);
+        regWrite(regs, REG_PIXEL_COUNT, buffer.command.pixelCount);
         regWrite(regs, REG_START_IDLE, 1u);
         dump_pixel_proc_regs(regs, "after-start");
 
-        // ---- Stage 3: Poll start/idle until hardware returns 0 ----
+        // ---- Stage 2: Poll start/idle until hardware returns 0 ----
         const uint32_t maxPolls = env_u32_hex_or_dec("VIBE_FPGA_POLL_LIMIT", 200000u);
         uint32_t poll = 0u;
         while (regRead(regs, REG_START_IDLE) != 0u) {
@@ -541,34 +635,43 @@ namespace bgslibrary
             dump_pixel_proc_regs(regs, "poll");
           if (++poll >= maxPolls) {
             dump_pixel_proc_regs(regs, "timeout");
-            assert(0 && "FPGA polling timed out");
             return(-1);
           }
-          if ((poll % 128u) == 0u) usleep(10);
+          if ((poll % 128u) == 0u)
+            usleep(10);
         }
+        __sync_synchronize();
 
-        // ---- Stage 4: Read output buffer and update software history ----
-        auto updateHistoryForPixel = [&](uint32_t pixelIndex) {
-          uint32_t slot   = model->position[pixelIndex % (2 * width + 1)];
-          uint32_t sampleIndex = slot % numberOfSamples;
-
-          const uint8_t *src = image_data + 3u * pixelIndex;
-          uint8_t *hist = model->fpgaDdrBuffer + DdrPixelLayout::historyOffset(pixelIndex, sampleIndex);
-          hist[0] = src[2];  // R
-          hist[1] = src[1];  // G
-          hist[2] = src[0];  // B
-          hist[3] = 0u;      // X
-        };
-
+        // ---- Stage 3: Copy the result and update this slot's model ----
         for (uint32_t pi = 0u; pi < pixelCount; ++pi) {
-          segmentation_map[pi] = fpgaOutputBuffer[pi];
-          if (segmentation_map[pi] == COLOR_BACKGROUND)
-            updateHistoryForPixel(pi);
+          segmentation_map[pi] = buffer.output[pi];
+          if (segmentation_map[pi] == COLOR_BACKGROUND) {
+            const uint32_t randomSlot =
+              model->position[pi % (2u * width + 1u)];
+            const uint32_t sampleIndex = randomSlot % numberOfSamples;
+            const uint8_t *src =
+              buffer.model + DdrPixelLayout::currentOffset(pi);
+            uint8_t *hist =
+              buffer.model + DdrPixelLayout::historyOffset(pi, sampleIndex);
+            memcpy(hist, src, 4u);
+          }
         }
 
         ++model->fpgaFrameSequence;
-
         return(0);
+      }
+
+      // Compatibility adapter for the original synchronous API.
+      int32_t libvibeModel_Sequential_Segmentation_8u_C3R(
+        vibeModel_Sequential_t *model,
+        const uint8_t *image_data,
+        uint8_t *segmentation_map
+      ) {
+        if (libvibeModel_Sequential_PrepareSlot_8u_C3R(
+              model, 0u, image_data) != 0)
+          return(-1);
+        return libvibeModel_Sequential_SegmentSlot_8u_C3R(
+          model, 0u, segmentation_map);
       }
 
       // =========================================================================

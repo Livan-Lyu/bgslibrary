@@ -111,6 +111,9 @@ namespace bgslibrary
 
   void FrameProcessor::finish(void)
   {
+    if (vibe)
+      vibe->finish();
+
     if (udpWriter.isOpened())
       udpWriter.release();
     udpWriterInitialized = false;

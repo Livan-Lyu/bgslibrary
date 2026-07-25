@@ -23,6 +23,7 @@ namespace bgslibrary
       constexpr uint32_t kSharedMemoryPhysBase    = 0xC4000000u;
       constexpr uint32_t kSharedMemoryPhysEnd     = 0xC9FFFFFFu;
       constexpr size_t   kOutputBytesPerPixel     = 1u;
+      constexpr uint32_t kFpgaBufferCount         = 2u;
 
       // =======================================================================
       // Register offsets (relative to FPGA base)
@@ -33,6 +34,15 @@ namespace bgslibrary
         REG_INPUT_PTR   = 0x10,  // RW: input buffer physical address
         REG_OUTPUT_PTR  = 0x18,  // RW: output buffer physical address
         REG_PIXEL_COUNT = 0x20,  // RW: total pixel count
+      };
+
+      // Values written to pixel_proc for one prepared slot.
+      struct PixelProcCommand
+      {
+        uint32_t startIdle;
+        uint32_t inputPtr;
+        uint32_t outputPtr;
+        uint32_t pixelCount;
       };
 
       // =======================================================================
@@ -62,6 +72,21 @@ namespace bgslibrary
         {
           return static_cast<size_t>(totalPixels) * kDdrBytesPerPixel;
         }
+      };
+
+      // One complete ping-pong slot: model input followed by the output map.
+      struct DdrFrameBuffer
+      {
+        uint32_t physBase;
+        uint32_t outputPhysBase;
+        uint32_t pixelCount;
+        size_t modelBytes;
+        size_t outputBytes;
+        size_t mappingBytes;
+        uint8_t *mapping;
+        uint8_t *model;
+        uint8_t *output;
+        PixelProcCommand command;
       };
 
       // =======================================================================
