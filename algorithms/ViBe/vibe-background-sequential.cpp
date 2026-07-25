@@ -654,7 +654,7 @@ namespace bgslibrary
         dump_pixel_proc_regs(regs, "after-start");
 
         // ---- Stage 2: Poll start/idle until hardware returns 0 ----
-        const uint32_t maxPolls = env_u32_hex_or_dec("VIBE_FPGA_POLL_LIMIT", 200000u);
+        const uint32_t maxPolls = env_u32_hex_or_dec("VIBE_FPGA_POLL_LIMIT", 1000000u);
         uint32_t poll = 0u;
         while (regRead(regs, REG_START_IDLE) != 0u) {
           if ((poll == 0u) || ((poll % 4096u) == 0u))
