@@ -4,12 +4,10 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
-#include <map>
 #include <mutex>
 #include <opencv2/opencv.hpp>
 #include <string>
 #include <thread>
-#include <vector>
 
 #include "ViBe/vibe-fpga-shared.h"
 #include "ViBe/vibe-background-sequential.h"
@@ -58,8 +56,8 @@ namespace bgslibrary
       std::condition_variable workAvailable;
       std::condition_variable resultAvailable;
       std::deque<WorkItem> workQueue;
-      std::map<uint64_t, std::vector<uint8_t>> completedFrames;
       std::array<SlotState, vibe::kFpgaBufferCount> slotStates;
+      std::array<uint64_t, vibe::kFpgaBufferCount> slotFrameNumbers;
       uint64_t nextFrameNumber;
       bool initialized;
       bool stopRequested;

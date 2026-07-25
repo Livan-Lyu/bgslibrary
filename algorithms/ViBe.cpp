@@ -1,7 +1,6 @@
 #include "ViBe.h"
 #include "../utils/GenericMacros.h"
 
-#include <cstring>
 #include <stdexcept>
 
 using namespace bgslibrary::algorithms;
@@ -20,6 +19,7 @@ ViBe::ViBe() :
   debug_construction(ViBe);
   model = vibe::libvibeModel_Sequential_New();
   slotStates.fill(SlotState::Free);
+  slotFrameNumbers.fill(0u);
 }
 
 ViBe::~ViBe() {
@@ -76,7 +76,7 @@ void ViBe::process(const cv::Mat &img_input, cv::Mat &img_output, cv::Mat &img_b
   if (frameNumber >= vibe::kFpgaBufferCount)
     collectResult(frameNumber - vibe::kFpgaBufferCount, img_output, input.size());
   else
-    img_output = cv::Mat::zeros(input.size(), CV_8UC1);
+    img_output.setTo(vibe::COLOR_BACKGROUND);
 
   {
     std::unique_lock<std::mutex> lock(pipelineMutex);
@@ -135,10 +135,9 @@ void ViBe::workerLoop()
       slotStates[item.slotIndex] = SlotState::Running;
     }
 
-    std::vector<uint8_t> output(m_lastSize.area(), vibe::COLOR_BACKGROUND);
     const int32_t status =
       vibe::libvibeModel_Sequential_SegmentSlot_8u_C3R(
-        model, item.slotIndex, output.data());
+        model, item.slotIndex, nullptr);
 
     {
       std::lock_guard<std::mutex> lock(pipelineMutex);
@@ -146,6 +145,7 @@ void ViBe::workerLoop()
         workerFailed = true;
         workerError = "FPGA ViBe slot execution failed";
         slotStates[item.slotIndex] = SlotState::Free;
+        slotFrameNumbers[item.slotIndex] = item.frameNumber;
         workQueue.clear();
         for (SlotState &state : slotStates) {
           if (state == SlotState::Ready)
@@ -154,7 +154,7 @@ void ViBe::workerLoop()
         stopRequested = true;
       } else {
         slotStates[item.slotIndex] = SlotState::Complete;
-        completedFrames.emplace(item.frameNumber, std::move(output));
+        slotFrameNumbers[item.slotIndex] = item.frameNumber;
       }
     }
     resultAvailable.notify_all();
@@ -177,6 +177,30 @@ void ViBe::stopWorker()
   workAvailable.notify_all();
   resultAvailable.notify_all();
   worker.join();
+
+  // Flush the final 0-2 completed frames so the unique background model is
+  // committed in frame order before the slot mappings disappear.
+  for (;;) {
+    int selectedSlot = -1;
+    uint64_t selectedFrame = 0u;
+    {
+      std::lock_guard<std::mutex> lock(pipelineMutex);
+      for (uint32_t i = 0u; i < vibe::kFpgaBufferCount; ++i) {
+        if (slotStates[i] != SlotState::Complete)
+          continue;
+        if (selectedSlot < 0 || slotFrameNumbers[i] < selectedFrame) {
+          selectedSlot = static_cast<int>(i);
+          selectedFrame = slotFrameNumbers[i];
+        }
+      }
+    }
+
+    if (selectedSlot < 0)
+      break;
+
+    cv::Mat ignored = cv::Mat::zeros(m_lastSize, CV_8UC1);
+    collectResult(selectedFrame, ignored, m_lastSize);
+  }
 }
 
 void ViBe::throwWorkerErrorLocked() const
@@ -191,19 +215,30 @@ void ViBe::collectResult(
   cv::Mat &img_output,
   const cv::Size &size)
 {
+  const uint32_t slotIndex =
+    static_cast<uint32_t>(frameNumber % vibe::kFpgaBufferCount);
   std::unique_lock<std::mutex> lock(pipelineMutex);
-  resultAvailable.wait(lock, [this, frameNumber] {
-    return completedFrames.find(frameNumber) != completedFrames.end() ||
-      workerFailed || stopRequested;
+  resultAvailable.wait(lock, [this, frameNumber, slotIndex] {
+    return (slotStates[slotIndex] == SlotState::Complete &&
+      slotFrameNumbers[slotIndex] == frameNumber) ||
+      workerFailed;
   });
   throwWorkerErrorLocked();
-  if (stopRequested && completedFrames.find(frameNumber) == completedFrames.end())
-    throw std::runtime_error("ViBe pipeline stopped before result collection");
+  if (img_output.empty() || img_output.size() != size || img_output.type() != CV_8UC1)
+    img_output = cv::Mat::zeros(size, CV_8UC1);
 
-  const std::vector<uint8_t> &result = completedFrames.at(frameNumber);
-  img_output = cv::Mat(size, CV_8UC1);
-  std::memcpy(img_output.data, result.data(), result.size());
-  completedFrames.erase(frameNumber);
-  slotStates[frameNumber % vibe::kFpgaBufferCount] = SlotState::Free;
+  lock.unlock();
+  if (vibe::libvibeModel_Sequential_CommitSlot_8u_C3R(
+        model, slotIndex, img_output.data) != 0) {
+    std::lock_guard<std::mutex> failLock(pipelineMutex);
+    workerFailed = true;
+    workerError = "FPGA ViBe slot commit failed";
+    slotStates[slotIndex] = SlotState::Free;
+    resultAvailable.notify_all();
+    throw std::runtime_error(workerError);
+  }
+
+  lock.lock();
+  slotStates[slotIndex] = SlotState::Free;
   resultAvailable.notify_all();
 }

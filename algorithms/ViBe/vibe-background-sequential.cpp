@@ -46,10 +46,11 @@ namespace bgslibrary
         /* Storage for the history. */
         uint32_t lastHistorySampleSwapped;
 
-        /*
-         * Two independent slots. A slot keeps the model produced by the
-         * frame two positions earlier, so slot(frame % 2) is the N-2 model.
-         */
+        /* The one and only background model maintained by software. */
+        uint8_t       *backgroundModel;
+        size_t         backgroundModelBytes;
+
+        /* Two independent work slots used as ping-pong staging buffers. */
         DdrFrameBuffer fpgaDdrBuffers[kFpgaBufferCount];
         size_t         fpgaDdrSlotBytes;
         int            fpgaDdrMemFd;
@@ -246,6 +247,9 @@ namespace bgslibrary
           buffer.output = NULL;
           buffer.mappingBytes = 0u;
         }
+        free(model->backgroundModel);
+        model->backgroundModel = NULL;
+        model->backgroundModelBytes = 0u;
 
         if (model->fpgaDevMemFd >= 0) {
           close(model->fpgaDevMemFd);
@@ -295,6 +299,8 @@ namespace bgslibrary
 
         /* pixel_proc / DDR */
         memset(model->fpgaDdrBuffers, 0, sizeof(model->fpgaDdrBuffers));
+        model->backgroundModel         = NULL;
+        model->backgroundModelBytes    = 0u;
         model->fpgaDdrSlotBytes          = 0u;
         model->fpgaDdrMemFd              = -1;
         model->fpgaPixelProcRegs        = NULL;
@@ -406,7 +412,7 @@ namespace bgslibrary
       }
 
       static void initialize_slot(
-        DdrFrameBuffer &buffer,
+        uint8_t *backgroundModel,
         const uint8_t *image_data,
         const uint32_t pixelCount,
         const uint32_t numberOfSamples
@@ -430,15 +436,15 @@ namespace bgslibrary
           return static_cast<uint8_t>(n);
         };
 
-        memset(buffer.model, 0, buffer.modelBytes);
-        memset(buffer.output, COLOR_BACKGROUND, buffer.outputBytes);
+        const size_t backgroundBytes = DdrPixelLayout::totalBytes(pixelCount);
+        memset(backgroundModel, 0, backgroundBytes);
 
         for (uint32_t pi = 0u; pi < pixelCount; ++pi) {
           const uint8_t *pixel = image_data + 3u * pi;
-          writeRgbxEntry(buffer.model + DdrPixelLayout::currentOffset(pi), pixel);
+          writeRgbxEntry(backgroundModel + DdrPixelLayout::currentOffset(pi), pixel);
 
           for (uint32_t s = 0u; s < numberOfSamples; ++s) {
-            uint8_t *hist = buffer.model + DdrPixelLayout::historyOffset(pi, s);
+            uint8_t *hist = backgroundModel + DdrPixelLayout::historyOffset(pi, s);
             if (s < NUMBER_OF_HISTORY_IMAGES) {
               writeRgbxEntry(hist, pixel);
             } else {
@@ -450,6 +456,17 @@ namespace bgslibrary
             }
           }
         }
+      }
+
+      static void copy_background_model_to_slot(
+        const vibeModel_Sequential_t *model,
+        DdrFrameBuffer &buffer
+      )
+      {
+        assert(model != NULL);
+        assert(model->backgroundModel != NULL);
+        assert(buffer.model != NULL);
+        memcpy(buffer.model, model->backgroundModel, model->backgroundModelBytes);
       }
 
       // =========================================================================
@@ -482,6 +499,10 @@ namespace bgslibrary
         const size_t outputBytes =
           static_cast<size_t>(pixelCount) * kOutputBytesPerPixel;
         if (modelBytes > SIZE_MAX - outputBytes)
+          return(-1);
+        model->backgroundModelBytes = modelBytes;
+        model->backgroundModel = static_cast<uint8_t*>(malloc(model->backgroundModelBytes));
+        if (model->backgroundModel == NULL)
           return(-1);
         model->fpgaDdrSlotBytes = modelBytes + outputBytes;
 
@@ -540,13 +561,20 @@ namespace bgslibrary
           }
         }
 
-        // Both slots start from the same initial model version.
-        for (uint32_t i = 0u; i < kFpgaBufferCount; ++i)
-          initialize_slot(
-            model->fpgaDdrBuffers[i],
-            image_data,
-            pixelCount,
-            model->numberOfSamples);
+        initialize_slot(
+          model->backgroundModel,
+          image_data,
+          pixelCount,
+          model->numberOfSamples);
+
+        // Warm-up: both slots start from the same unique model snapshot.
+        for (uint32_t i = 0u; i < kFpgaBufferCount; ++i) {
+          copy_background_model_to_slot(model, model->fpgaDdrBuffers[i]);
+          memset(
+            model->fpgaDdrBuffers[i].output,
+            COLOR_BACKGROUND,
+            model->fpgaDdrBuffers[i].outputBytes);
+        }
 
         fprintf(stdout,
           "[ViBe] double buffer ready: slotBytes=%zu, A=0x%08X, B=0x%08X\n",
@@ -582,9 +610,11 @@ namespace bgslibrary
           return(-1);
 
         DdrFrameBuffer &buffer = model->fpgaDdrBuffers[slotIndex];
-        if (buffer.model == NULL || buffer.output == NULL)
+        if (buffer.model == NULL || buffer.output == NULL ||
+            model->backgroundModel == NULL)
           return(-1);
 
+        copy_background_model_to_slot(model, buffer);
         write_current_frame(buffer, image_data, buffer.pixelCount);
         memset(buffer.output, COLOR_BACKGROUND, buffer.outputBytes);
         return(0);
@@ -598,8 +628,7 @@ namespace bgslibrary
         const uint32_t slotIndex,
         uint8_t *segmentation_map
       ) {
-        if (model == NULL || segmentation_map == NULL ||
-            slotIndex >= kFpgaBufferCount)
+        if (model == NULL || slotIndex >= kFpgaBufferCount)
           return(-1);
 
         DdrFrameBuffer &buffer = model->fpgaDdrBuffers[slotIndex];
@@ -607,9 +636,6 @@ namespace bgslibrary
             model->fpgaPixelProcRegs == NULL)
           return(-1);
 
-        const uint32_t width = model->width;
-        const uint32_t pixelCount = buffer.pixelCount;
-        const uint32_t numberOfSamples = model->numberOfSamples;
         volatile uint32_t *regs = model->fpgaPixelProcRegs;
 
         if (!shared_memory_contains(buffer.physBase, model->fpgaDdrSlotBytes) ||
@@ -642,22 +668,50 @@ namespace bgslibrary
         }
         __sync_synchronize();
 
-        // ---- Stage 3: Copy the result and update this slot's model ----
+        ++model->fpgaFrameSequence;
+        return(0);
+      }
+
+      // =========================================================================
+      // Slot commit — update the unique background model from a completed slot
+      // =========================================================================
+      int32_t libvibeModel_Sequential_CommitSlot_8u_C3R(
+        vibeModel_Sequential_t *model,
+        const uint32_t slotIndex,
+        uint8_t *segmentation_map
+      ) {
+        if (model == NULL || slotIndex >= kFpgaBufferCount)
+          return(-1);
+
+        DdrFrameBuffer &buffer = model->fpgaDdrBuffers[slotIndex];
+        if (buffer.model == NULL || buffer.output == NULL ||
+            model->backgroundModel == NULL)
+          return(-1);
+
+        const uint32_t width = model->width;
+        const uint32_t pixelCount = buffer.pixelCount;
+        const uint32_t numberOfSamples = model->numberOfSamples;
+
         for (uint32_t pi = 0u; pi < pixelCount; ++pi) {
-          segmentation_map[pi] = buffer.output[pi];
-          if (segmentation_map[pi] == COLOR_BACKGROUND) {
+          const uint8_t result = buffer.output[pi];
+          if (segmentation_map != NULL)
+            segmentation_map[pi] = result;
+
+          if (result == COLOR_BACKGROUND) {
             const uint32_t randomSlot =
               model->position[pi % (2u * width + 1u)];
             const uint32_t sampleIndex = randomSlot % numberOfSamples;
             const uint8_t *src =
               buffer.model + DdrPixelLayout::currentOffset(pi);
+            uint8_t *dstCurrent =
+              model->backgroundModel + DdrPixelLayout::currentOffset(pi);
             uint8_t *hist =
-              buffer.model + DdrPixelLayout::historyOffset(pi, sampleIndex);
+              model->backgroundModel + DdrPixelLayout::historyOffset(pi, sampleIndex);
+            memcpy(dstCurrent, src, 4u);
             memcpy(hist, src, 4u);
           }
         }
 
-        ++model->fpgaFrameSequence;
         return(0);
       }
 
@@ -670,7 +724,10 @@ namespace bgslibrary
         if (libvibeModel_Sequential_PrepareSlot_8u_C3R(
               model, 0u, image_data) != 0)
           return(-1);
-        return libvibeModel_Sequential_SegmentSlot_8u_C3R(
+        if (libvibeModel_Sequential_SegmentSlot_8u_C3R(
+              model, 0u, segmentation_map) != 0)
+          return(-1);
+        return libvibeModel_Sequential_CommitSlot_8u_C3R(
           model, 0u, segmentation_map);
       }
 

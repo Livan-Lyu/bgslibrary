@@ -60,6 +60,12 @@ namespace bgslibrary
         uint8_t *segmentation_map
       );
 
+      int32_t libvibeModel_Sequential_CommitSlot_8u_C3R(
+        vibeModel_Sequential_t *model,
+        const uint32_t slotIndex,
+        uint8_t *segmentation_map
+      );
+
       int32_t libvibeModel_Sequential_Segmentation_8u_C3R(
         vibeModel_Sequential_t *model,
         const uint8_t *image_data,
