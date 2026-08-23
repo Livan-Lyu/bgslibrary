@@ -59,6 +59,7 @@ namespace bgslibrary
       std::array<SlotState, vibe::kFpgaBufferCount> slotStates;
       std::array<uint64_t, vibe::kFpgaBufferCount> slotFrameNumbers;
       uint64_t nextFrameNumber;
+      double lastFpgaLatencyMs;
       bool initialized;
       bool stopRequested;
       bool workerFailed;
@@ -68,6 +69,7 @@ namespace bgslibrary
       ViBe();
       ~ViBe();
 
+      double getFpgaLatencyMs();
       void process(const cv::Mat &img_input, cv::Mat &img_output, cv::Mat &img_bgmodel);
       void finish();
 

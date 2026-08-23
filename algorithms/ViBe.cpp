@@ -12,6 +12,7 @@ ViBe::ViBe() :
   firstTime(true),
   model(nullptr),
   nextFrameNumber(0u),
+  lastFpgaLatencyMs(0.0),
   initialized(false),
   stopRequested(false),
   workerFailed(false)
@@ -26,6 +27,12 @@ ViBe::~ViBe() {
   finish();
   debug_destruction(ViBe);
   vibe::libvibeModel_Sequential_Free(model);
+}
+
+double ViBe::getFpgaLatencyMs()
+{
+  std::lock_guard<std::mutex> lock(pipelineMutex);
+  return lastFpgaLatencyMs;
 }
 
 void ViBe::init(const cv::Mat &img_input, cv::Mat &img_outfg, cv::Mat &img_outbg)
@@ -135,9 +142,10 @@ void ViBe::workerLoop()
       slotStates[item.slotIndex] = SlotState::Running;
     }
 
+    double fpgaLatencyMs = 0.0;
     const int32_t status =
       vibe::libvibeModel_Sequential_SegmentSlot_8u_C3R(
-        model, item.slotIndex, nullptr);
+        model, item.slotIndex, nullptr, &fpgaLatencyMs);
 
     {
       std::lock_guard<std::mutex> lock(pipelineMutex);
@@ -155,6 +163,7 @@ void ViBe::workerLoop()
       } else {
         slotStates[item.slotIndex] = SlotState::Complete;
         slotFrameNumbers[item.slotIndex] = item.frameNumber;
+        lastFpgaLatencyMs = fpgaLatencyMs;
       }
     }
     resultAvailable.notify_all();

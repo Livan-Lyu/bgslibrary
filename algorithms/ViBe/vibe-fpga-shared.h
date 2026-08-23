@@ -13,7 +13,7 @@ namespace bgslibrary
       // pixel_proc hardware-fixed parameters
       // =======================================================================
       constexpr uint32_t kHistoryFramesHw       = 23u;   // 24 entries = 1 current + 23 history
-      constexpr size_t   kDdrBytesPerPixel      = 96u;   // 24 entries × 4 bytes (RGBX)
+      constexpr size_t   kDdrBytesPerPixel      = 72u;   // 24 entries × 3 bytes (RGB)
       constexpr uint32_t kHardwareSadThreshold  = 45u;   // SAD ≤ 45 is a match
       constexpr uint32_t kHardwareMatchingNumber = 2u;   // match_count ≥ 2 → background
       // =======================================================================
@@ -46,12 +46,12 @@ namespace bgslibrary
       };
 
       // =======================================================================
-      // DDR buffer layout (pixel-interleaved, 96 bytes/pixel, 24 entries)
+      // DDR buffer layout (pixel-interleaved, 72 bytes/pixel, 24 RGB entries)
       // =======================================================================
       struct DdrPixelLayout
       {
         static constexpr uint32_t kEntriesPerPixel = 24;
-        static constexpr uint32_t kBytesPerEntry   = 4;
+        static constexpr uint32_t kBytesPerEntry   = 3;
 
         static size_t pixelBlockOffset(uint32_t pixelIndex)
         {

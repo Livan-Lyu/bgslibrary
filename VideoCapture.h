@@ -18,10 +18,6 @@ namespace bgslibrary
     cv::VideoCapture capture;
     cv::Mat frame;
     int key;
-    int64 start_time;
-    int64 delta_time;
-    double freq;
-    double fps;
     int frameNumber;
     int stopAt;
     bool useCamera;

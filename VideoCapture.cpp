@@ -67,8 +67,7 @@ namespace bgslibrary
   }
 
   VideoCapture::VideoCapture() :
-    key(0), start_time(0), delta_time(0), freq(0),
-    fps(0), frameNumber(0), stopAt(0), useCamera(false),
+    key(0), frameNumber(0), stopAt(0), useCamera(false),
     cameraIndex(0), useVideo(false), input_resize_percent(100),
     showOutput(true), showFPS(true), enableFlip(false)
   {
@@ -144,6 +143,7 @@ namespace bgslibrary
     std::cout << "loopDelay:" << loopDelay << std::endl;
 
     frameProcessor->setOutputFps(input_fps > 0 ? static_cast<double>(input_fps) : 1000.0 / loopDelay);
+    frameProcessor->setShowPipelineStats(showFPS);
 
     std::cout << "Press 'ESC' to stop..." << std::endl;
     do
@@ -219,22 +219,7 @@ namespace bgslibrary
       cv::Mat img_input;
       frame.copyTo(img_input);
 
-      // 处理帧并计时
-      start_time = cv::getTickCount();
       frameProcessor->process(img_input);
-      delta_time = cv::getTickCount() - start_time;
-      freq = cv::getTickFrequency();
-      fps = freq / delta_time;
-      std::cout << "FPS: " << fps << std::endl;
-      
-      if (showFPS)
-        cv::putText(img_input,
-              "FPS: " + std::to_string(fps),
-              cv::Point(10,15), // Coordinates
-              cv::FONT_HERSHEY_COMPLEX_SMALL, // Font
-              1.0, // Scale. 2.0 = 2x bigger
-              cv::Scalar(0,0,255), // BGR Color
-              1); // Line Thickness (Optional)
 
       // Input frame is streamed over UDP in FrameProcessor (GStreamer).
 

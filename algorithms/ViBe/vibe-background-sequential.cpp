@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <chrono>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -407,7 +408,6 @@ namespace bgslibrary
           cur[0] = src[2];  // R
           cur[1] = src[1];  // G
           cur[2] = src[0];  // B
-          cur[3] = 0u;      // X
         }
       }
 
@@ -418,15 +418,14 @@ namespace bgslibrary
         const uint32_t numberOfSamples
       )
       {
-        auto writeRgbxEntry = [](uint8_t *dst, const uint8_t *src) {
+        auto writeRgbEntry = [](uint8_t *dst, const uint8_t *src) {
           dst[0] = src[2];  // R
           dst[1] = src[1];  // G
           dst[2] = src[0];  // B
-          dst[3] = 0u;      // X
         };
 
-        auto writeRgbxValues = [](uint8_t *dst, uint8_t r, uint8_t g, uint8_t b) {
-          dst[0] = r; dst[1] = g; dst[2] = b; dst[3] = 0u;
+        auto writeRgbValues = [](uint8_t *dst, uint8_t r, uint8_t g, uint8_t b) {
+          dst[0] = r; dst[1] = g; dst[2] = b;
         };
 
         auto plusNoise = [](uint8_t value) -> uint8_t {
@@ -441,14 +440,14 @@ namespace bgslibrary
 
         for (uint32_t pi = 0u; pi < pixelCount; ++pi) {
           const uint8_t *pixel = image_data + 3u * pi;
-          writeRgbxEntry(backgroundModel + DdrPixelLayout::currentOffset(pi), pixel);
+          writeRgbEntry(backgroundModel + DdrPixelLayout::currentOffset(pi), pixel);
 
           for (uint32_t s = 0u; s < numberOfSamples; ++s) {
             uint8_t *hist = backgroundModel + DdrPixelLayout::historyOffset(pi, s);
             if (s < NUMBER_OF_HISTORY_IMAGES) {
-              writeRgbxEntry(hist, pixel);
+              writeRgbEntry(hist, pixel);
             } else {
-              writeRgbxValues(
+              writeRgbValues(
                 hist,
                 plusNoise(pixel[0]),
                 plusNoise(pixel[1]),
@@ -626,7 +625,8 @@ namespace bgslibrary
       int32_t libvibeModel_Sequential_SegmentSlot_8u_C3R(
         vibeModel_Sequential_t *model,
         const uint32_t slotIndex,
-        uint8_t *segmentation_map
+        uint8_t *segmentation_map,
+        double *fpga_latency_ms
       ) {
         if (model == NULL || slotIndex >= kFpgaBufferCount)
           return(-1);
@@ -646,10 +646,11 @@ namespace bgslibrary
           return(-1);
         }
 
-        // ---- Stage 1: Submit this slot to pixel_proc ----
+          // ---- Stage 1: Submit this slot to pixel_proc ----
         regWrite(regs, REG_INPUT_PTR, buffer.command.inputPtr);
         regWrite(regs, REG_OUTPUT_PTR, buffer.command.outputPtr);
         regWrite(regs, REG_PIXEL_COUNT, buffer.command.pixelCount);
+          const auto startTime = std::chrono::steady_clock::now();
         regWrite(regs, REG_START_IDLE, 1u);
         dump_pixel_proc_regs(regs, "after-start");
 
@@ -667,6 +668,12 @@ namespace bgslibrary
             usleep(10);
         }
         __sync_synchronize();
+
+          if (fpga_latency_ms != NULL) {
+            const auto endTime = std::chrono::steady_clock::now();
+            *fpga_latency_ms = std::chrono::duration<double, std::milli>(
+              endTime - startTime).count();
+          }
 
         ++model->fpgaFrameSequence;
         return(0);
@@ -707,8 +714,8 @@ namespace bgslibrary
               model->backgroundModel + DdrPixelLayout::currentOffset(pi);
             uint8_t *hist =
               model->backgroundModel + DdrPixelLayout::historyOffset(pi, sampleIndex);
-            memcpy(dstCurrent, src, 4u);
-            memcpy(hist, src, 4u);
+            memcpy(dstCurrent, src, DdrPixelLayout::kBytesPerEntry);
+            memcpy(hist, src, DdrPixelLayout::kBytesPerEntry);
           }
         }
 
@@ -725,7 +732,7 @@ namespace bgslibrary
               model, 0u, image_data) != 0)
           return(-1);
         if (libvibeModel_Sequential_SegmentSlot_8u_C3R(
-              model, 0u, segmentation_map) != 0)
+            model, 0u, segmentation_map, NULL) != 0)
           return(-1);
         return libvibeModel_Sequential_CommitSlot_8u_C3R(
           model, 0u, segmentation_map);

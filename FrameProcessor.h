@@ -15,9 +15,10 @@ namespace bgslibrary
   private:
     bool firstTime;
     long frameNumber;
-    std::string processname;
-    double duration;
-    std::string tictoc;
+    int64 lastOutputTick;
+    double pipelineFps;
+    double fpgaLatencyMs;
+    std::string pipelineStatus;
 
     cv::Mat img_vibe;
     std::shared_ptr<algorithms::ViBe> vibe;
@@ -25,6 +26,7 @@ namespace bgslibrary
     cv::VideoWriter udpWriter;
     bool udpWriterInitialized = false;
     double outputFps = 30.0;
+    bool showPipelineStats = true;
     const std::string streamHost = "192.168.7.3";
     const int streamPort = 5000;
     bool enableUdpStreaming = true;
@@ -34,13 +36,13 @@ namespace bgslibrary
     ~FrameProcessor();
 
     void setOutputFps(double fps);
+    void setShowPipelineStats(bool show);
     void process(const cv::Mat &img_input);
     void finish(void);
 
   private:
     void initUdpWriter(const cv::Size &frameSize);
     cv::Mat buildStreamFrame(const cv::Mat &img_input, const cv::Mat &img_output);
-    void tic(std::string value);
-    void toc();
+    void updatePipelineStats(int64 processEndTick);
   };
 }

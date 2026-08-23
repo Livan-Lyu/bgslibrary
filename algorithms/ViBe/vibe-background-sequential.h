@@ -57,7 +57,8 @@ namespace bgslibrary
       int32_t libvibeModel_Sequential_SegmentSlot_8u_C3R(
         vibeModel_Sequential_t *model,
         const uint32_t slotIndex,
-        uint8_t *segmentation_map
+        uint8_t *segmentation_map,
+        double *fpga_latency_ms
       );
 
       int32_t libvibeModel_Sequential_CommitSlot_8u_C3R(

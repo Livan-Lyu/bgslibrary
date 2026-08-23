@@ -6,8 +6,11 @@
 namespace bgslibrary
 {
   FrameProcessor::FrameProcessor() :
-    firstTime(true), frameNumber(0), duration(0),
-    tictoc("")
+    firstTime(true), frameNumber(0),
+    lastOutputTick(0),
+    pipelineFps(0.0),
+    fpgaLatencyMs(0.0),
+    pipelineStatus("Warm-up 0/2")
   {
     debug_construction(FrameProcessor);
   }
@@ -20,6 +23,11 @@ namespace bgslibrary
   {
     if (fps > 0.0)
       outputFps = fps;
+  }
+
+  void FrameProcessor::setShowPipelineStats(bool show)
+  {
+    showPipelineStats = show;
   }
 
   void FrameProcessor::initUdpWriter(const cv::Size &frameSize)
@@ -78,6 +86,8 @@ namespace bgslibrary
 
     cv::putText(canvas, "Input", cv::Point(10, 25), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
     cv::putText(canvas, "FG", cv::Point(x + 8, y + 24), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
+    if (showPipelineStats)
+      cv::putText(canvas, pipelineStatus, cv::Point(10, 52), cv::FONT_HERSHEY_SIMPLEX, 0.65, cv::Scalar(0, 255, 255), 2);
 
     return canvas;
   }
@@ -90,13 +100,10 @@ namespace bgslibrary
       vibe = std::make_shared<algorithms::ViBe>();
 
     cv::Mat img_bgmodel;
-    if (tictoc == "ViBe")
-      tic("ViBe");
-
     vibe->process(img_input, img_vibe, img_bgmodel);
-
-    if (tictoc == "ViBe")
-      toc();
+    const int64 processEndTick = cv::getTickCount();
+    fpgaLatencyMs = vibe->getFpgaLatencyMs();
+    updatePipelineStats(processEndTick);
 
     if (enableUdpStreaming && !img_input.empty())
     {
@@ -119,15 +126,31 @@ namespace bgslibrary
     udpWriterInitialized = false;
   }
 
-  void FrameProcessor::tic(std::string value)
+  void FrameProcessor::updatePipelineStats(int64 processEndTick)
   {
-    processname = value;
-    duration = static_cast<double>(cv::getTickCount());
+    if (frameNumber <= static_cast<long>(algorithms::vibe::kFpgaBufferCount)) {
+      std::ostringstream status;
+      status << "Warm-up " << frameNumber << "/" << algorithms::vibe::kFpgaBufferCount
+              << " | FPGA " << std::fixed << std::setprecision(2) << fpgaLatencyMs << " ms";
+      pipelineStatus = status.str();
+      if (showPipelineStats)
+        std::cout << pipelineStatus << std::endl;
+      return;
+    }
+
+    if (lastOutputTick != 0) {
+      const double tickDelta = static_cast<double>(processEndTick - lastOutputTick);
+      if (tickDelta > 0.0)
+        pipelineFps = cv::getTickFrequency() / tickDelta;
+    }
+    lastOutputTick = processEndTick;
+
+    std::ostringstream status;
+    status << "Pipe FPS: " << std::fixed << std::setprecision(2) << pipelineFps
+          << " | FPGA " << std::fixed << std::setprecision(2) << fpgaLatencyMs << " ms";
+    pipelineStatus = status.str();
+    if (showPipelineStats)
+      std::cout << pipelineStatus << std::endl;
   }
 
-  void FrameProcessor::toc()
-  {
-    duration = (static_cast<double>(cv::getTickCount()) - duration) / cv::getTickFrequency();
-    std::cout << processname << "\ttime(sec):" << std::fixed << std::setprecision(6) << duration << std::endl;
-  }
 }
